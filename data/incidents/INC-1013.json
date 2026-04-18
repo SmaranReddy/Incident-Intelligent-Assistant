@@ -1,0 +1,27 @@
+{
+  "incident_id": "INC-1013",
+  "title": "auth-service returning 500 for users with unicode characters in display name",
+  "service": "auth-service",
+  "severity": "SEV3",
+  "timestamp": "2024-12-11T16:59:00Z",
+  "resolved_at": "2024-12-11T18:22:00Z",
+  "duration_minutes": 83,
+  "symptoms": [
+    "Users with emoji or CJK characters in display name getting 500 on profile update",
+    "auth-service logs: UnicodeEncodeError: 'latin-1' codec can't encode character",
+    "Affects approximately 3% of user base"
+  ],
+  "root_cause": "New audit logging module used Python's logging with latin-1 encoding for file handler. Any user with non-latin character in their name caused logging to crash mid-request.",
+  "resolution": "Updated FileHandler to use UTF-8 encoding. Audit logs now handle full Unicode range.",
+  "services_affected": [
+    "auth-service",
+    "user-service",
+    "gateway-api"
+  ],
+  "related_prs": [
+    "PR-138"
+  ],
+  "oncall_engineer": "carol_kim",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1013",
+  "scenario_id": null
+}

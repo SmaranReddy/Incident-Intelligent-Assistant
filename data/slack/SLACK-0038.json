@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0038",
+  "incident_id": "INC-1037",
+  "service": "order-service",
+  "channel": "#incidents-order-service",
+  "thread_start": "2025-02-02T13:58:00Z",
+  "thread_end": "2025-02-02T14:20:00Z",
+  "participants": [
+    "dave_patel",
+    "frank_nguyen",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-02-02T13:58:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV2] order-service: alert threshold breached."
+    },
+    {
+      "timestamp": "2025-02-02T14:02:00Z",
+      "author": "dave_patel",
+      "text": "Checking. Looks like Primary DB CPU jumped from 18% to 99% within 12 minutes of deploy. Investigating."
+    },
+    {
+      "timestamp": "2025-02-02T14:05:00Z",
+      "author": "frank_nguyen",
+      "text": "I see it too. Could be related to recent deploy."
+    },
+    {
+      "timestamp": "2025-02-02T14:08:00Z",
+      "author": "dave_patel",
+      "text": "Found the issue: ProductService.get_by_id() is called once per order item in a Python for-loop, i.... Deploying fix."
+    },
+    {
+      "timestamp": "2025-02-02T14:12:00Z",
+      "author": "frank_nguyen",
+      "text": "Fix deployed. Metrics recovering."
+    },
+    {
+      "timestamp": "2025-02-02T14:15:00Z",
+      "author": "dave_patel",
+      "text": "Confirmed resolved. Writing up incident report."
+    }
+  ]
+}

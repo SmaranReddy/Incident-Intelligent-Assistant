@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-147",
+  "title": "feat: add Prometheus metrics endpoint to user-service",
+  "service": "user-service",
+  "summary": "Routine observability change for user-service. No functional behavior changes.",
+  "files_changed": [
+    "src/metrics/prometheus.py",
+    "src/server.py"
+  ],
+  "author": "kate_brennan",
+  "reviewers": [
+    "kate_brennan",
+    "eve_thompson"
+  ],
+  "merged_at": "2025-01-31T11:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

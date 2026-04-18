@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0027",
+  "incident_id": "INC-1026",
+  "service": "gateway-api",
+  "channel": "#incidents-gateway-api",
+  "thread_start": "2025-02-03T18:58:00Z",
+  "thread_end": "2025-02-03T19:20:00Z",
+  "participants": [
+    "carol_kim",
+    "frank_nguyen",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-02-03T18:58:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV2] gateway-api: error rate exceeding SLO."
+    },
+    {
+      "timestamp": "2025-02-03T19:03:00Z",
+      "author": "carol_kim",
+      "text": "On it. All endpoint p99 latencies jumped to exactly 30 000 ms. Checking recent changes."
+    },
+    {
+      "timestamp": "2025-02-03T19:06:00Z",
+      "author": "frank_nguyen",
+      "text": "There was a deploy 20 minutes ago. Checking diff."
+    },
+    {
+      "timestamp": "2025-02-03T19:09:00Z",
+      "author": "carol_kim",
+      "text": "Root cause: The NGINX config change placed proxy_read_timeout 30s in the http {} block inste.... Rolling back."
+    },
+    {
+      "timestamp": "2025-02-03T19:13:00Z",
+      "author": "frank_nguyen",
+      "text": "Rollback successful. Error rate normalizing."
+    },
+    {
+      "timestamp": "2025-02-03T19:16:00Z",
+      "author": "carol_kim",
+      "text": "Incident closed. Postmortem scheduled for tomorrow."
+    }
+  ]
+}

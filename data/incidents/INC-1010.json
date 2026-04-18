@@ -1,0 +1,27 @@
+{
+  "incident_id": "INC-1010",
+  "title": "user-service pagination returning duplicate records",
+  "service": "user-service",
+  "severity": "SEV3",
+  "timestamp": "2024-12-03T10:17:00Z",
+  "resolved_at": "2024-12-03T10:40:00Z",
+  "duration_minutes": 23,
+  "symptoms": [
+    "GET /users?page=N returning overlapping records with page N-1",
+    "Frontend infinite scroll showing duplicate user entries",
+    "Data inconsistency reported by QA in staging canary"
+  ],
+  "root_cause": "ORDER BY clause missing on paginated query; cursor-based pagination requires stable sort order.",
+  "resolution": "Added ORDER BY created_at, id to paginated query. Deployed hotfix. No data loss.",
+  "services_affected": [
+    "user-service",
+    "checkout-service",
+    "auth-service"
+  ],
+  "related_prs": [
+    "PR-135"
+  ],
+  "oncall_engineer": "alice_chen",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1010",
+  "scenario_id": null
+}

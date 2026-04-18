@@ -1,0 +1,26 @@
+{
+  "incident_id": "INC-1005",
+  "service": "order-service",
+  "symptoms": [
+    "Primary DB CPU jumped from 18% to 99% within 12 minutes of deploy",
+    "Slow query log: 80 000 individual SELECT on products table per minute",
+    "GET /orders/history p99 latency: 140 ms → 9 200 ms",
+    "Read replica replication lag: 52 seconds behind primary",
+    "DB connection pool at 97% — downstream services starting to queue"
+  ],
+  "hypotheses_tested": [
+    "Recent deploy caused the issue",
+    "N+1 query regression in order history"
+  ],
+  "failed_attempts": [
+    "Reverting the deploy as a temporary fix"
+  ],
+  "confirmed_root_cause": "ProductService.get_by_id() is called once per order item in a Python for-loop, issuing one SELECT per call, causing an N+1 query regression",
+  "resolution_action": "Hotfix: replaced loop with single SELECT ... WHERE id IN (all_item_ids) batch query, deployed behind feature flag",
+  "services_affected": [
+    "order-service",
+    "user-service",
+    "inventory-service"
+  ],
+  "confidence": 0.98
+}

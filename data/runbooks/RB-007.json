@@ -1,0 +1,24 @@
+{
+  "runbook_id": "RB-007",
+  "title": "notification-service Retry Storm Against External Email/Push Provider",
+  "service": "notification-service",
+  "issue_type": "retry_storm_external_provider",
+  "last_updated": "2024-09-05T00:00:00Z",
+  "owner_team": "notification-eng",
+  "steps": [
+    "1. Confirm: check thread pool saturation and external provider error rate in Grafana.",
+    "2. Check if external provider has an active incident: status.sendgrid.com or equivalent.",
+    "3. Immediate action: enable circuit breaker via env var: `CIRCUIT_BREAKER_ENABLED=true CIRCUIT_BREAKER_THRESHOLD=10`",
+    "4. Redeploy notification-service to pick up env var change.",
+    "5. Monitor thread pool utilization. Should drop as circuit opens and retries stop.",
+    "6. Set retry queue to drain slowly: `RETRY_RATE_LIMIT=100` (messages/minute).",
+    "7. If provider recovers: close circuit breaker: `CIRCUIT_BREAKER_ENABLED=false`, replay queue.",
+    "8. Monitor replay rate to avoid overwhelming provider on restart.",
+    "9. Check dead-letter queue for permanently failed messages: replay after provider recovery.",
+    "10. Post-incident: ensure circuit breaker is NOT optional for any external HTTP client."
+  ],
+  "escalation": "Page notification-service oncall. Alert downstream teams (payment, auth) if their notification flows are impacted.",
+  "related_runbooks": [
+    "RB-013"
+  ]
+}

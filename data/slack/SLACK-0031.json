@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0031",
+  "incident_id": "INC-1030",
+  "service": "checkout-service",
+  "channel": "#incidents-checkout-service",
+  "thread_start": "2025-02-16T06:58:00Z",
+  "thread_end": "2025-02-16T07:20:00Z",
+  "participants": [
+    "carol_kim",
+    "jake_wilson",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-02-16T06:58:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV2] checkout-service: alert threshold breached."
+    },
+    {
+      "timestamp": "2025-02-16T07:02:00Z",
+      "author": "carol_kim",
+      "text": "Checking. Looks like 47 customer support tickets in 2 hours: 'discount not showing at checkout'. Investigating."
+    },
+    {
+      "timestamp": "2025-02-16T07:05:00Z",
+      "author": "jake_wilson",
+      "text": "I see it too. Could be related to recent deploy."
+    },
+    {
+      "timestamp": "2025-02-16T07:08:00Z",
+      "author": "carol_kim",
+      "text": "Found the issue: The cache invalidation webhook began silently failing 6 days ago after a service.... Deploying fix."
+    },
+    {
+      "timestamp": "2025-02-16T07:12:00Z",
+      "author": "jake_wilson",
+      "text": "Fix deployed. Metrics recovering."
+    },
+    {
+      "timestamp": "2025-02-16T07:15:00Z",
+      "author": "carol_kim",
+      "text": "Confirmed resolved. Writing up incident report."
+    }
+  ]
+}

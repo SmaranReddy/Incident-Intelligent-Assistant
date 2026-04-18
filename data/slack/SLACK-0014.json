@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0014",
+  "incident_id": "INC-1013",
+  "service": "auth-service",
+  "channel": "#incidents-auth-service",
+  "thread_start": "2024-12-11T16:57:00Z",
+  "thread_end": "2024-12-11T17:19:00Z",
+  "participants": [
+    "carol_kim",
+    "jake_wilson",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-12-11T16:57:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV3] auth-service: alert threshold breached."
+    },
+    {
+      "timestamp": "2024-12-11T17:01:00Z",
+      "author": "carol_kim",
+      "text": "Checking. Looks like Users with emoji or CJK characters in display name getting 500 on profile update. Investigating."
+    },
+    {
+      "timestamp": "2024-12-11T17:04:00Z",
+      "author": "jake_wilson",
+      "text": "I see it too. Could be related to recent deploy."
+    },
+    {
+      "timestamp": "2024-12-11T17:07:00Z",
+      "author": "carol_kim",
+      "text": "Found the issue: New audit logging module used Python's logging with latin-1 encoding for file ha.... Deploying fix."
+    },
+    {
+      "timestamp": "2024-12-11T17:11:00Z",
+      "author": "jake_wilson",
+      "text": "Fix deployed. Metrics recovering."
+    },
+    {
+      "timestamp": "2024-12-11T17:14:00Z",
+      "author": "carol_kim",
+      "text": "Confirmed resolved. Writing up incident report."
+    }
+  ]
+}

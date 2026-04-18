@@ -1,0 +1,24 @@
+{
+  "incident_id": "INC-1010",
+  "service": "user-service",
+  "symptoms": [
+    "GET /users?page=N returning overlapping records with page N-1",
+    "Frontend infinite scroll showing duplicate user entries",
+    "Data inconsistency reported by QA in staging canary"
+  ],
+  "hypotheses_tested": [
+    "recent changes",
+    "ORDER BY clause missing on paginated query; cursor-based pagination requires stable sort order"
+  ],
+  "failed_attempts": [
+    "rollback"
+  ],
+  "confirmed_root_cause": "ORDER BY clause missing on paginated query; cursor-based pagination requires stable sort order",
+  "resolution_action": "Added ORDER BY created_at, id to paginated query. Deployed hotfix.",
+  "services_affected": [
+    "user-service",
+    "checkout-service",
+    "auth-service"
+  ],
+  "confidence": 0.98
+}

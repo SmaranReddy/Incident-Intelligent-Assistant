@@ -1,0 +1,76 @@
+{
+  "thread_id": "SLACK-0007",
+  "incident_id": "INC-1006",
+  "service": "auth-service",
+  "channel": "#incidents-auth-service",
+  "thread_start": "2024-10-09T11:49:00Z",
+  "thread_end": "2024-10-09T12:31:00Z",
+  "participants": [
+    "carol_kim",
+    "pagerduty-bot",
+    "alice_chen",
+    "iris_nakamura"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-10-09T11:49:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV1] auth-service: availability 0% for 8 minutes. All health checks failing."
+    },
+    {
+      "timestamp": "2024-10-09T11:52:00Z",
+      "author": "carol_kim",
+      "text": "auth-service completely down. Checking pods... pods are running but not serving traffic. gRPC health check failing."
+    },
+    {
+      "timestamp": "2024-10-09T11:53:00Z",
+      "author": "alice_chen",
+      "text": "Logs: 'tls: failed to verify certificate: x509: certificate has expired'. TLS certificate expired??"
+    },
+    {
+      "timestamp": "2024-10-09T11:54:00Z",
+      "author": "carol_kim",
+      "text": "Certificate expired? cert-manager should handle this. Let me check cert-manager logs."
+    },
+    {
+      "timestamp": "2024-10-09T11:55:00Z",
+      "author": "iris_nakamura",
+      "text": "cert-manager logs: 'Not renewing certificate auth-service-tls, not within renewBefore window'. The window is 7 days. Cert expires today."
+    },
+    {
+      "timestamp": "2024-10-09T11:56:00Z",
+      "author": "carol_kim",
+      "text": "But renewBefore is 7 days... the cert should have been renewed 7 days ago. Unless the cert had more than 7 days left when the config changed?"
+    },
+    {
+      "timestamp": "2024-10-09T11:57:00Z",
+      "author": "alice_chen",
+      "text": "Found it. PR #341 changed renewBefore from 30d to 7d. At the time of the PR the cert had 23 days left. Outside the new 7-day window. cert-manager never triggered renewal. Then the cert just expired naturally."
+    },
+    {
+      "timestamp": "2024-10-09T11:58:00Z",
+      "author": "iris_nakamura",
+      "text": "So the config change created a dead zone between 7 and 30 days. Any cert in that range gets stranded."
+    },
+    {
+      "timestamp": "2024-10-09T11:59:00Z",
+      "author": "carol_kim",
+      "text": "I'm manually forcing renewal now: kubectl annotate cert... done. cert-manager is issuing new cert."
+    },
+    {
+      "timestamp": "2024-10-09T12:03:00Z",
+      "author": "carol_kim",
+      "text": "New cert propagated. auth-service responding. Login success rate 100%."
+    },
+    {
+      "timestamp": "2024-10-09T12:05:00Z",
+      "author": "alice_chen",
+      "text": "We need a cert expiry alert at 14 days, not just 7. And a CI check that validates the renewBefore policy won't strand existing certs."
+    },
+    {
+      "timestamp": "2024-10-09T12:06:00Z",
+      "author": "iris_nakamura",
+      "text": "Also, any cert-manager config change should trigger a full audit of all managed certs to check for stranding."
+    }
+  ]
+}

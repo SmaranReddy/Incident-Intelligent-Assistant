@@ -1,0 +1,17 @@
+{
+  "pr_id": "PR-119",
+  "title": "perf: add database index on user-service most-queried columns",
+  "service": "user-service",
+  "summary": "Routine performance change for user-service. No functional behavior changes.",
+  "files_changed": [
+    "db/migrations/add_indexes.sql"
+  ],
+  "author": "frank_nguyen",
+  "reviewers": [
+    "dave_patel",
+    "carol_kim"
+  ],
+  "merged_at": "2024-11-21T15:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": null
+}

@@ -1,0 +1,19 @@
+{
+  "pr_id": "PR-100",
+  "title": "feat: tighten rate limits on checkout-service to prevent API abuse",
+  "service": "checkout-service",
+  "summary": "Reduces per-user rate limit from 1 000 req/min to 100 req/min following an observed scraping campaign. Also migrates rate limiter from Redis-based sliding window algorithm to a simpler fixed-window counter for operational simplicity. Burst allowance of 2\u00d7 removed.",
+  "files_changed": [
+    "src/middleware/rate_limiter.py",
+    "config/rate_limits.yaml",
+    "tests/test_rate_limiter.py"
+  ],
+  "author": "alice_chen",
+  "reviewers": [
+    "liam_foster",
+    "eve_thompson"
+  ],
+  "merged_at": "2024-09-01T10:00:00Z",
+  "risk_level": "high",
+  "scenario_id": "rate_limiter_misconfiguration"
+}

@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0034",
+  "incident_id": "INC-1033",
+  "service": "notification-service",
+  "channel": "#incidents-notification-service",
+  "thread_start": "2025-01-16T09:58:00Z",
+  "thread_end": "2025-01-16T10:20:00Z",
+  "participants": [
+    "carol_kim",
+    "kate_brennan",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-01-16T09:58:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV1] notification-service: error rate exceeding SLO."
+    },
+    {
+      "timestamp": "2025-01-16T10:03:00Z",
+      "author": "carol_kim",
+      "text": "On it. SendGrid API returning 503 with message 'too many requests from single source'. Checking recent changes."
+    },
+    {
+      "timestamp": "2025-01-16T10:06:00Z",
+      "author": "kate_brennan",
+      "text": "There was a deploy 20 minutes ago. Checking diff."
+    },
+    {
+      "timestamp": "2025-01-16T10:09:00Z",
+      "author": "carol_kim",
+      "text": "Root cause: SendGrid had a 20-minute partial outage. Without circuit breaking, all 2 000 wor.... Rolling back."
+    },
+    {
+      "timestamp": "2025-01-16T10:13:00Z",
+      "author": "kate_brennan",
+      "text": "Rollback successful. Error rate normalizing."
+    },
+    {
+      "timestamp": "2025-01-16T10:16:00Z",
+      "author": "carol_kim",
+      "text": "Incident closed. Postmortem scheduled for tomorrow."
+    }
+  ]
+}

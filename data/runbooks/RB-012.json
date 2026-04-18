@@ -1,0 +1,21 @@
+{
+  "runbook_id": "RB-012",
+  "title": "user-service Password Reset Token Failures",
+  "service": "user-service",
+  "issue_type": "password_reset_token_failure",
+  "last_updated": "2024-09-03T00:00:00Z",
+  "owner_team": "user-eng",
+  "steps": [
+    "1. Reproduce: request password reset and click link within 2 minutes. If 'token expired' \u2192 timestamp bug.",
+    "2. Check server timezone: `kubectl exec <pod> -- date` \u2014 should output UTC.",
+    "3. Check token TTL in Redis: `redis-cli TTL password_reset_token:<token_id>` \u2014 should be close to 3600.",
+    "4. If TTL is 0 or very small: timezone mismatch in token expiry calculation.",
+    "5. Check token generation code for datetime.now() vs datetime.utcnow() vs time.time().",
+    "6. Fix: standardize all timestamp generation to UTC. Use `int(time.time())` for Redis TTL.",
+    "7. Ensure all Kubernetes nodes and pods are configured with TZ=UTC.",
+    "8. Test fix: generate token, check Redis TTL, click link \u2014 should succeed within TTL window.",
+    "9. Issue new tokens for any users currently locked out."
+  ],
+  "escalation": "Page user-service oncall. Notify customer support with workaround (manual account unlock) for affected users.",
+  "related_runbooks": []
+}

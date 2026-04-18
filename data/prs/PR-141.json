@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-141",
+  "title": "feat: add structured JSON logging to checkout-service",
+  "service": "checkout-service",
+  "summary": "Routine observability change for checkout-service. No functional behavior changes.",
+  "files_changed": [
+    "src/logging/structured_logger.py",
+    "src/server.py"
+  ],
+  "author": "liam_foster",
+  "reviewers": [
+    "liam_foster",
+    "iris_nakamura"
+  ],
+  "merged_at": "2025-01-19T15:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

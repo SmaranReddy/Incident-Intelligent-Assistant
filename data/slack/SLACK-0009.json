@@ -1,0 +1,76 @@
+{
+  "thread_id": "SLACK-0009",
+  "incident_id": "INC-1008",
+  "service": "gateway-api",
+  "channel": "#incidents-gateway-api",
+  "thread_start": "2024-10-18T12:53:00Z",
+  "thread_end": "2024-10-18T13:35:00Z",
+  "participants": [
+    "pagerduty-bot",
+    "dave_patel",
+    "eve_thompson",
+    "iris_nakamura"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-10-18T12:53:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV2] gateway-api: p99 latency 30,000 ms across all endpoints. SLO breach."
+    },
+    {
+      "timestamp": "2024-10-18T12:57:00Z",
+      "author": "dave_patel",
+      "text": "Everything is timing out at exactly 30 seconds. Not random \u2014 exactly 30s. That's a configured timeout value."
+    },
+    {
+      "timestamp": "2024-10-18T12:58:00Z",
+      "author": "iris_nakamura",
+      "text": "Was there a gateway deploy today? Checking... yes, NGINX config change for the ML recommendations endpoint. 30-second timeout."
+    },
+    {
+      "timestamp": "2024-10-18T12:59:00Z",
+      "author": "dave_patel",
+      "text": "Checking the nginx.conf diff... the proxy_read_timeout 30s is in the http block, not in the location block. It's global."
+    },
+    {
+      "timestamp": "2024-10-18T13:00:00Z",
+      "author": "eve_thompson",
+      "text": "So all endpoints now have a 30-second timeout. Requests that should fail at 3s are now hanging for 30s. Thread pool fills up."
+    },
+    {
+      "timestamp": "2024-10-18T13:01:00Z",
+      "author": "dave_patel",
+      "text": "Rolling back the gateway configmap now. kubectl rollout undo deployment/gateway-api."
+    },
+    {
+      "timestamp": "2024-10-18T13:03:00Z",
+      "author": "dave_patel",
+      "text": "Rollback complete. Latency recovering. 8s... 4s... back to normal."
+    },
+    {
+      "timestamp": "2024-10-18T13:04:00Z",
+      "author": "iris_nakamura",
+      "text": "I'll reapply the config correctly \u2014 timeout inside the location block only."
+    },
+    {
+      "timestamp": "2024-10-18T13:06:00Z",
+      "author": "eve_thompson",
+      "text": "That's live. /api/v2/recommendations gets 30s, everything else stays at 3s."
+    },
+    {
+      "timestamp": "2024-10-18T13:07:00Z",
+      "author": "dave_patel",
+      "text": "All clear. Gateway healthy."
+    },
+    {
+      "timestamp": "2024-10-18T13:09:00Z",
+      "author": "iris_nakamura",
+      "text": "We need mandatory nginx-config-review for gateway changes. And a staging soak that actually exercises all endpoint types, not just the changed one."
+    },
+    {
+      "timestamp": "2024-10-18T13:10:00Z",
+      "author": "dave_patel",
+      "text": "Adding those to the gateway PR template as required steps."
+    }
+  ]
+}

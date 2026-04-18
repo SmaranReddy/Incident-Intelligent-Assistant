@@ -1,0 +1,351 @@
+[
+  {
+    "runbook_id": "RB-001",
+    "title": "checkout-service High Error Rate",
+    "service": "checkout-service",
+    "issue_type": "high_error_rate",
+    "last_updated": "2024-09-03T00:00:00Z",
+    "owner_team": "checkout-eng",
+    "steps": [
+      "1. Open Grafana checkout-service dashboard. Check error rate by endpoint.",
+      "2. Check rate limiter metrics: `kubectl exec -it <pod> -- curl localhost:9090/metrics | grep rate_limit`",
+      "3. If 429 spike: verify rate limiter scope (per-user vs global). Check `config/rate_limits.yaml`.",
+      "4. If 500 spike: check application logs for stack traces: `kubectl logs -l app=checkout-service --since=10m | grep ERROR`",
+      "5. Check downstream dependency health: payment-service /health, inventory-service /health.",
+      "6. If downstream degraded: enable circuit breaker via `CIRCUIT_BREAKER_ENABLED=true` env var.",
+      "7. If error rate >30% sustained for 5 min: initiate rollback to previous deployment.",
+      "8. Rollback: `kubectl rollout undo deployment/checkout-service`",
+      "9. Verify recovery: confirm error rate below 1% for 5 consecutive minutes.",
+      "10. Post-incident: collect slow query log, heap dump, and nginx access log for postmortem."
+    ],
+    "escalation": "Page checkout-service oncall. If SEV1, notify #incidents and loop in payment-service oncall.",
+    "related_runbooks": [
+      "RB-008"
+    ]
+  },
+  {
+    "runbook_id": "RB-002",
+    "title": "order-service Database Connection Pool Exhaustion",
+    "service": "order-service",
+    "issue_type": "database_connection_exhaustion",
+    "last_updated": "2024-09-19T00:00:00Z",
+    "owner_team": "order-eng",
+    "steps": [
+      "1. Confirm connection pool exhaustion: check logs for 'QueuePool limit overflow' or 'connection pool exhausted'.",
+      "2. Get current pool utilization: `kubectl exec -it <pod> -- curl localhost:9090/metrics | grep db_pool`",
+      "3. Identify which query is holding connections: query `information_schema.processlist` on RDS.",
+      "4. Check for connection leaks: look for connections in 'Sleep' state held >30s.",
+      "5. If leak found: restart affected pods to flush leaked connections: `kubectl rollout restart deployment/order-service`",
+      "6. As emergency measure: increase pool size via env var `DB_POOL_SIZE=50` and redeploy.",
+      "7. Identify root cause: check recent deploys for new DB-touching code paths. Look for missing connection.close().",
+      "8. If N+1 query suspected: check slow query log for repeated single-row SELECTs on same table.",
+      "9. Deploy fix or rollback if root cause identified.",
+      "10. Add monitoring alert: `db_pool_utilization > 0.75` should page before full exhaustion."
+    ],
+    "escalation": "Page order-service oncall. Alert DBA team if RDS CPU >80%. Notify #incidents for SEV1.",
+    "related_runbooks": [
+      "RB-010"
+    ]
+  },
+  {
+    "runbook_id": "RB-003",
+    "title": "auth-service OOM / High Memory Usage",
+    "service": "auth-service",
+    "issue_type": "high_memory_oom",
+    "last_updated": "2024-09-21T00:00:00Z",
+    "owner_team": "auth-eng",
+    "steps": [
+      "1. Confirm OOM: `kubectl describe pod <pod-name> | grep -A5 'Last State'` \u2014 look for OOMKilled.",
+      "2. Check memory growth rate: Grafana \u2192 auth-service \u2192 Container Memory. Is it linear (leak) or spike (traffic)?",
+      "3. If linear growth: pull heap dump before next OOM: `kubectl exec <pod> -- curl localhost:6060/debug/pprof/heap > heap.prof`",
+      "4. Analyze heap dump: look for unbounded in-memory caches (LRU, dict, set) without TTL or size caps.",
+      "5. Common culprits: JWT cache (token_cache.py), session store, request/response logging buffers.",
+      "6. Immediate relief: increase memory limit temporarily via `MEMORY_LIMIT=2Gi` env var to buy time.",
+      "7. Deploy fix: add TTL and memory-based eviction to identified cache. Reduce max entries.",
+      "8. Verify fix: monitor memory over 2 hours. Should plateau, not grow.",
+      "9. Add alert: `container_memory_usage_bytes > 1.5 * memory_request` \u2192 page oncall."
+    ],
+    "escalation": "Page auth-service oncall. If all replicas OOMKilling simultaneously, page incident commander \u2014 auth down = full site impact.",
+    "related_runbooks": [
+      "RB-004"
+    ]
+  },
+  {
+    "runbook_id": "RB-004",
+    "title": "auth-service TLS Certificate Expired or Expiring",
+    "service": "auth-service",
+    "issue_type": "tls_certificate_expiry",
+    "last_updated": "2024-09-22T00:00:00Z",
+    "owner_team": "auth-eng",
+    "steps": [
+      "1. Confirm cert issue: `kubectl describe cert auth-service-tls | grep -A10 'Status'`",
+      "2. Check expiry: `openssl s_client -connect auth-service:443 2>/dev/null | openssl x509 -noout -dates`",
+      "3. Check cert-manager logs: `kubectl logs -n cert-manager deploy/cert-manager | grep auth-service-tls`",
+      "4. If cert expired and cert-manager not renewing: check renewBefore window vs remaining validity.",
+      "5. Force manual renewal: `kubectl annotate cert auth-service-tls cert-manager.io/issueAsCertificateRequest=$(date +%s)`",
+      "6. Wait for cert issuance (typically 60\u2013120 seconds). Monitor: `kubectl get cert auth-service-tls -w`",
+      "7. Verify new cert propagated to all pods: check READY column shows True.",
+      "8. Test mTLS: `grpcurl -insecure auth-service:443 grpc.health.v1.Health/Check`",
+      "9. If cert-manager ACME challenge failing: check DNS records and verify challenge solver config.",
+      "10. After resolution: audit ALL managed certs for any in the 7\u201330 day renewal window gap."
+    ],
+    "escalation": "Cert expiry = SEV1 (complete auth failure). Page incident commander immediately. Notify #security.",
+    "related_runbooks": [
+      "RB-003"
+    ]
+  },
+  {
+    "runbook_id": "RB-005",
+    "title": "payment-service Stripe Webhook Signature Validation Failures",
+    "service": "payment-service",
+    "issue_type": "webhook_validation_failure",
+    "last_updated": "2024-09-02T00:00:00Z",
+    "owner_team": "payment-eng",
+    "steps": [
+      "1. Confirm via Stripe dashboard: Developers \u2192 Webhooks \u2192 view recent events. Look for 4xx response codes.",
+      "2. Check payment-service logs: `kubectl logs -l app=payment-service | grep -i 'SignatureVerification\\|webhook\\|400'`",
+      "3. Verify webhook signing secret is correct: compare env var STRIPE_WEBHOOK_SECRET with Stripe dashboard value.",
+      "4. If secret mismatch: update Kubernetes secret: `kubectl create secret generic stripe-webhook-secret --from-literal=key=whsec_... --dry-run=client -o yaml | kubectl apply -f -`",
+      "5. If secret correct but still failing: check that raw request body is being passed to construct_event(), not parsed JSON.",
+      "6. Test with Stripe CLI: `stripe trigger payment_intent.succeeded` and watch logs.",
+      "7. Once fixed, replay missed events: use Stripe API to list events since incident start, replay each via POST /internal/webhook-replay.",
+      "8. Reconcile affected orders: query orders with status='payment_pending' and payment_intent_id matching replayed events.",
+      "9. Notify finance team of impacted transaction window for reconciliation."
+    ],
+    "escalation": "Page payment-service oncall. Notify finance for any reconciliation gaps. SEV1 if duration >15 min.",
+    "related_runbooks": [
+      "RB-006",
+      "RB-014"
+    ]
+  },
+  {
+    "runbook_id": "RB-006",
+    "title": "payment-service Database Deadlock Surge",
+    "service": "payment-service",
+    "issue_type": "database_deadlocks",
+    "last_updated": "2024-09-05T00:00:00Z",
+    "owner_team": "payment-eng",
+    "steps": [
+      "1. Confirm deadlocks: `kubectl logs -l app=payment-service | grep -i deadlock`",
+      "2. Get deadlock graph: `SHOW ENGINE INNODB STATUS\\G` on primary DB \u2014 look for LATEST DETECTED DEADLOCK.",
+      "3. Identify contended tables from deadlock graph. Common: idempotency_keys, payment_transactions.",
+      "4. Immediate mitigation: set `innodb_lock_wait_timeout=2` to fail fast and reduce cascading waits.",
+      "5. Check if any transaction holds locks during external API calls (Stripe, banks) \u2014 this is always a bug.",
+      "6. If confirmed: move external API call outside transaction scope. Deploy hotfix.",
+      "7. Add retry jitter to clients: `time.sleep(random.uniform(0.1, 0.5))` before retry.",
+      "8. Monitor: deadlock rate should drop to near zero within 2 minutes of fix.",
+      "9. Review optimistic vs pessimistic locking strategy for affected table.",
+      "10. Add deadlock rate alert: >5 deadlocks/minute should page oncall."
+    ],
+    "escalation": "Page payment-service oncall. If payment error rate >5%, escalate to SEV1 and notify #incidents.",
+    "related_runbooks": [
+      "RB-005",
+      "RB-014"
+    ]
+  },
+  {
+    "runbook_id": "RB-007",
+    "title": "notification-service Retry Storm Against External Email/Push Provider",
+    "service": "notification-service",
+    "issue_type": "retry_storm_external_provider",
+    "last_updated": "2024-09-05T00:00:00Z",
+    "owner_team": "notification-eng",
+    "steps": [
+      "1. Confirm: check thread pool saturation and external provider error rate in Grafana.",
+      "2. Check if external provider has an active incident: status.sendgrid.com or equivalent.",
+      "3. Immediate action: enable circuit breaker via env var: `CIRCUIT_BREAKER_ENABLED=true CIRCUIT_BREAKER_THRESHOLD=10`",
+      "4. Redeploy notification-service to pick up env var change.",
+      "5. Monitor thread pool utilization. Should drop as circuit opens and retries stop.",
+      "6. Set retry queue to drain slowly: `RETRY_RATE_LIMIT=100` (messages/minute).",
+      "7. If provider recovers: close circuit breaker: `CIRCUIT_BREAKER_ENABLED=false`, replay queue.",
+      "8. Monitor replay rate to avoid overwhelming provider on restart.",
+      "9. Check dead-letter queue for permanently failed messages: replay after provider recovery.",
+      "10. Post-incident: ensure circuit breaker is NOT optional for any external HTTP client."
+    ],
+    "escalation": "Page notification-service oncall. Alert downstream teams (payment, auth) if their notification flows are impacted.",
+    "related_runbooks": [
+      "RB-013"
+    ]
+  },
+  {
+    "runbook_id": "RB-008",
+    "title": "checkout-service Serving Stale or Incorrect Prices",
+    "service": "checkout-service",
+    "issue_type": "stale_price_cache",
+    "last_updated": "2024-09-26T00:00:00Z",
+    "owner_team": "checkout-eng",
+    "steps": [
+      "1. Confirm stale data: compare price in checkout-service response vs pricing-service API for same SKU.",
+      "2. Check cache invalidation webhook health: `kubectl logs -l app=checkout-service | grep price_update_webhook`",
+      "3. If webhook returning 4xx: check service account token expiry. Token likely rotated without updating webhook config.",
+      "4. Fix token: `kubectl create secret generic pricing-webhook-token --from-literal=token=<new_token> --dry-run=client -o yaml | kubectl apply -f -`",
+      "5. Restart checkout-service to pick up new token.",
+      "6. Flush price cache for all affected SKUs: `curl -X POST http://checkout-service/admin/cache/flush/prices`",
+      "7. Verify prices now correct: spot-check 10 SKUs against pricing-service.",
+      "8. If TTL is >5 minutes: revert to 5-minute TTL as a safety measure until invalidation is verified.",
+      "9. Add monitoring: webhook endpoint health check with alert on any 4xx/5xx responses."
+    ],
+    "escalation": "Page checkout-service oncall. Notify finance and marketing of impacted pricing window. Check if active promotions are affected.",
+    "related_runbooks": [
+      "RB-001"
+    ]
+  },
+  {
+    "runbook_id": "RB-009",
+    "title": "gateway-api NGINX Timeout Misconfiguration",
+    "service": "gateway-api",
+    "issue_type": "nginx_timeout_misconfiguration",
+    "last_updated": "2024-09-19T00:00:00Z",
+    "owner_team": "gateway-eng",
+    "steps": [
+      "1. Confirm: check if ALL endpoints are timing out at exactly the same value (e.g., 30s). Uniform timeout = config issue.",
+      "2. Check recent gateway deployments: `kubectl rollout history deployment/gateway-api`",
+      "3. Diff nginx.conf: `kubectl get configmap gateway-nginx-config -o yaml` and compare with git HEAD.",
+      "4. Look for timeout directives in wrong scope (http block vs server block vs location block).",
+      "5. Immediate rollback: `kubectl rollout undo deployment/gateway-api`",
+      "6. Verify recovery: p99 latency should return to baseline within 60 seconds.",
+      "7. Apply corrected config with timeout scoped to specific location block only.",
+      "8. Test: verify ML endpoint has 30s timeout, all other endpoints have 3s timeout.",
+      "9. Deploy corrected config with canary (10% traffic) and monitor for 15 minutes before full rollout."
+    ],
+    "escalation": "Page gateway-api oncall. Global timeout misconfiguration is effectively a site-wide incident \u2014 notify #incidents.",
+    "related_runbooks": [
+      "RB-015"
+    ]
+  },
+  {
+    "runbook_id": "RB-010",
+    "title": "order-service N+1 Query Performance Regression",
+    "service": "order-service",
+    "issue_type": "n_plus_one_query",
+    "last_updated": "2024-10-01T00:00:00Z",
+    "owner_team": "order-eng",
+    "steps": [
+      "1. Confirm via slow query log: `kubectl exec <db-pod> -- mysql -e 'SELECT * FROM slow_log ORDER BY start_time DESC LIMIT 50'`",
+      "2. Look for pattern: same table queried N times in rapid succession from same host.",
+      "3. Correlate with recent deploy: check if N+1 pattern started at specific deployment time.",
+      "4. Identify endpoint: match slow query timestamps with application request logs.",
+      "5. Immediate relief: rollback the offending deployment: `kubectl rollout undo deployment/order-service`",
+      "6. Verify DB CPU returns to baseline within 3 minutes of rollback.",
+      "7. Root cause fix: replace loop-based queries with batch query using WHERE id IN (...).",
+      "8. Add query count assertion to integration test before re-deploying.",
+      "9. Add DB query rate alert: >20k queries/minute should page oncall."
+    ],
+    "escalation": "Page order-service oncall. Alert DBA if DB CPU >80%. If read replica lag >60s, pause async workloads.",
+    "related_runbooks": [
+      "RB-002"
+    ]
+  },
+  {
+    "runbook_id": "RB-011",
+    "title": "inventory-service Stock Count Race Condition / Overselling",
+    "service": "inventory-service",
+    "issue_type": "stock_race_condition",
+    "last_updated": "2024-09-10T00:00:00Z",
+    "owner_team": "inventory-eng",
+    "steps": [
+      "1. Confirm negative stock: `SELECT sku, stock_count FROM inventory WHERE stock_count < 0`",
+      "2. Identify affected orders: `SELECT * FROM orders WHERE sku IN (<negative_skus>) AND created_at > <incident_start>`",
+      "3. Immediate: set stock to 0 for negative-count SKUs to prevent further overselling.",
+      "4. Verify the stock update query uses atomic operation: `UPDATE inventory SET stock = stock - 1 WHERE id = ? AND stock > 0`",
+      "5. If read-then-write pattern found: deploy hotfix with atomic UPDATE.",
+      "6. Contact warehouse team with list of oversold orders.",
+      "7. Determine customer impact: cancel orders that cannot be fulfilled or source from alternate warehouse.",
+      "8. Add SELECT FOR UPDATE or atomic compare-and-swap to all stock mutation code paths.",
+      "9. Add alert: `SELECT COUNT(*) FROM inventory WHERE stock_count < 0` running every 5 minutes."
+    ],
+    "escalation": "Page inventory-service oncall. Alert warehouse ops immediately. Notify customer service with affected order IDs.",
+    "related_runbooks": []
+  },
+  {
+    "runbook_id": "RB-012",
+    "title": "user-service Password Reset Token Failures",
+    "service": "user-service",
+    "issue_type": "password_reset_token_failure",
+    "last_updated": "2024-09-03T00:00:00Z",
+    "owner_team": "user-eng",
+    "steps": [
+      "1. Reproduce: request password reset and click link within 2 minutes. If 'token expired' \u2192 timestamp bug.",
+      "2. Check server timezone: `kubectl exec <pod> -- date` \u2014 should output UTC.",
+      "3. Check token TTL in Redis: `redis-cli TTL password_reset_token:<token_id>` \u2014 should be close to 3600.",
+      "4. If TTL is 0 or very small: timezone mismatch in token expiry calculation.",
+      "5. Check token generation code for datetime.now() vs datetime.utcnow() vs time.time().",
+      "6. Fix: standardize all timestamp generation to UTC. Use `int(time.time())` for Redis TTL.",
+      "7. Ensure all Kubernetes nodes and pods are configured with TZ=UTC.",
+      "8. Test fix: generate token, check Redis TTL, click link \u2014 should succeed within TTL window.",
+      "9. Issue new tokens for any users currently locked out."
+    ],
+    "escalation": "Page user-service oncall. Notify customer support with workaround (manual account unlock) for affected users.",
+    "related_runbooks": []
+  },
+  {
+    "runbook_id": "RB-013",
+    "title": "notification-service Duplicate Push Notification Delivery",
+    "service": "notification-service",
+    "issue_type": "duplicate_notifications",
+    "last_updated": "2024-09-08T00:00:00Z",
+    "owner_team": "notification-eng",
+    "steps": [
+      "1. Confirm: check push notification provider dashboard for delivery volume vs expected.",
+      "2. Check Kafka consumer group lag and rebalance events: `kafka-consumer-groups.sh --describe --group notification-consumer`",
+      "3. Look for recent consumer group rebalance (common during deploys).",
+      "4. Check if deduplication is implemented: grep for event_id or idempotency check in dispatcher.",
+      "5. If no deduplication: add event_id check before sending: `if already_sent(event_id): return`",
+      "6. Use Redis SET with NX flag and TTL as idempotency store: `SET notif:{event_id} 1 NX EX 86400`",
+      "7. For Kafka: reset consumer group offset to after the duplicate window: `kafka-consumer-groups.sh --reset-offsets --to-datetime <time>`",
+      "8. Deploy deduplication fix and monitor notification volume returns to expected rate.",
+      "9. Notify push provider if over-billing from spike to request credit."
+    ],
+    "escalation": "Page notification-service oncall. Alert mobile team if user complaints surge. Check app store reviews.",
+    "related_runbooks": [
+      "RB-007"
+    ]
+  },
+  {
+    "runbook_id": "RB-014",
+    "title": "payment-service Silent Failure in Payment Processing",
+    "service": "payment-service",
+    "issue_type": "silent_exception_swallowing",
+    "last_updated": "2024-09-04T00:00:00Z",
+    "owner_team": "payment-eng",
+    "steps": [
+      "1. Confirm: POST /payments returns 200 but payment_status stays pending in DB.",
+      "2. Check Stripe dashboard for corresponding PaymentIntent \u2014 was it created?",
+      "3. Search code for bare except: pass or except Exception: return None patterns.",
+      "4. Add logging to all exception handlers: `except Exception as e: logger.error('Payment failed', exc_info=True)`",
+      "5. Replace silent failures with explicit error responses: return HTTP 500 with error details.",
+      "6. Deploy fix and verify: payment failures now return non-200 status codes.",
+      "7. Replay affected payments: identify orders with status='pending' and created_at during incident window.",
+      "8. For each affected order: manually trigger payment retry or notify customer.",
+      "9. Run integration test suite to catch any other silent failure patterns."
+    ],
+    "escalation": "Page payment-service oncall. Notify finance for reconciliation. Customer service needs list of affected orders.",
+    "related_runbooks": [
+      "RB-005",
+      "RB-006"
+    ]
+  },
+  {
+    "runbook_id": "RB-015",
+    "title": "gateway-api CORS Misconfiguration Blocking Clients",
+    "service": "gateway-api",
+    "issue_type": "cors_misconfiguration",
+    "last_updated": "2024-09-18T00:00:00Z",
+    "owner_team": "gateway-eng",
+    "steps": [
+      "1. Reproduce: check browser network tab for preflight (OPTIONS) request. Look for missing CORS headers.",
+      "2. Identify which Origin or header is being blocked: check Access-Control-Request-Headers in failed preflight.",
+      "3. Check nginx CORS config: `kubectl get configmap gateway-nginx-config -o yaml | grep -A10 cors`",
+      "4. Compare allowed headers list with headers being sent by the blocked client.",
+      "5. Add missing header to Access-Control-Allow-Headers in nginx config.",
+      "6. Also ensure Access-Control-Allow-Methods includes all required HTTP methods.",
+      "7. Apply config change and reload nginx: `kubectl rollout restart deployment/gateway-api`",
+      "8. Test: trigger preflight request from affected client and confirm 204 response with correct headers.",
+      "9. Add CORS smoke test to CI that verifies all known client headers are allowed."
+    ],
+    "escalation": "Page gateway-api oncall. Identify which app versions are affected and coordinate with mobile team on timeline.",
+    "related_runbooks": [
+      "RB-009"
+    ]
+  }
+]

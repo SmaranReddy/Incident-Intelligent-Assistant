@@ -1,0 +1,19 @@
+{
+  "pr_id": "PR-108",
+  "title": "infra: increase read timeout for ML recommendations endpoint to 30 s",
+  "service": "gateway-api",
+  "summary": "New ML inference endpoint /api/v2/recommendations can take 6\u20138 s for cold requests. Current 3 s gateway timeout causes premature 504s. Increasing proxy_read_timeout to 30 s. Change scoped to /api/v2/recommendations only.",
+  "files_changed": [
+    "k8s/gateway/nginx.conf",
+    "k8s/gateway/configmap.yaml",
+    "terraform/gateway_lb.tf"
+  ],
+  "author": "grace_okonkwo",
+  "reviewers": [
+    "bob_martinez",
+    "frank_nguyen"
+  ],
+  "merged_at": "2024-10-16T10:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": "nginx_timeout_config_drift"
+}

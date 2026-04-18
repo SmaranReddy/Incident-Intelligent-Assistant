@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-135",
+  "title": "fix: handle empty response body in user-service API client",
+  "service": "user-service",
+  "summary": "Routine bugfix change for user-service. No functional behavior changes.",
+  "files_changed": [
+    "src/clients/api_client.py",
+    "tests/test_api_client.py"
+  ],
+  "author": "henry_silva",
+  "reviewers": [
+    "liam_foster",
+    "alice_chen"
+  ],
+  "merged_at": "2025-01-06T15:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

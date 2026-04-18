@@ -1,0 +1,27 @@
+{
+  "incident_id": "INC-1016",
+  "title": "order-service search returning results from wrong tenant in multi-tenant environment",
+  "service": "order-service",
+  "severity": "SEV1",
+  "timestamp": "2024-12-28T18:19:00Z",
+  "resolved_at": "2024-12-28T19:25:00Z",
+  "duration_minutes": 66,
+  "symptoms": [
+    "Merchant A seeing order data from Merchant B in search results",
+    "tenant_id filter missing from Elasticsearch query",
+    "Potential data privacy compliance issue \u2014 legal notified"
+  ],
+  "root_cause": "New Elasticsearch query builder did not include tenant_id filter clause. Single-tenant Elasticsearch index had tenant isolation enforced at query level, not index level.",
+  "resolution": "Hotfix added mandatory tenant_id term filter to all search queries. Full audit of all ES queries conducted. No evidence of bulk data exfiltration.",
+  "services_affected": [
+    "order-service",
+    "notification-service",
+    "inventory-service"
+  ],
+  "related_prs": [
+    "PR-114"
+  ],
+  "oncall_engineer": "dave_patel",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1016",
+  "scenario_id": null
+}

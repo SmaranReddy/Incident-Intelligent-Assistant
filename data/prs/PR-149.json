@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-149",
+  "title": "chore: update notification-service dependencies to latest patch versions",
+  "service": "notification-service",
+  "summary": "Routine dependency-update change for notification-service. No functional behavior changes.",
+  "files_changed": [
+    "requirements.txt",
+    "package.json"
+  ],
+  "author": "eve_thompson",
+  "reviewers": [
+    "carol_kim",
+    "frank_nguyen"
+  ],
+  "merged_at": "2025-02-05T17:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

@@ -1,0 +1,1 @@
+Python is used for AI and backend development.

@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-127",
+  "title": "refactor: extract auth-service config loader into separate module",
+  "service": "auth-service",
+  "summary": "Routine refactor change for auth-service. No functional behavior changes.",
+  "files_changed": [
+    "src/config/loader.py",
+    "src/config/__init__.py"
+  ],
+  "author": "liam_foster",
+  "reviewers": [
+    "henry_silva",
+    "bob_martinez"
+  ],
+  "merged_at": "2024-12-14T10:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": null
+}

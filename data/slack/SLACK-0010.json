@@ -1,0 +1,81 @@
+{
+  "thread_id": "SLACK-0010",
+  "incident_id": "INC-1009",
+  "service": "payment-service",
+  "channel": "#incidents-payment-service",
+  "thread_start": "2024-10-23T11:17:00Z",
+  "thread_end": "2024-10-23T11:59:00Z",
+  "participants": [
+    "frank_nguyen",
+    "grace_okonkwo",
+    "pagerduty-bot",
+    "bob_martinez"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-10-23T11:17:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV1] payment-service: error rate 23%. DB deadlock errors spiking."
+    },
+    {
+      "timestamp": "2024-10-23T11:21:00Z",
+      "author": "bob_martinez",
+      "text": "Payment failures at 23%. MySQL deadlock errors. Multiple transactions are locking each other."
+    },
+    {
+      "timestamp": "2024-10-23T11:22:00Z",
+      "author": "grace_okonkwo",
+      "text": "Deadlock graph from information_schema shows: T1 holds idempotency_keys row lock, waiting on payment_transactions. T2 holds payment_transactions lock, waiting on idempotency_keys. Classic AB/BA."
+    },
+    {
+      "timestamp": "2024-10-23T11:23:00Z",
+      "author": "bob_martinez",
+      "text": "The idempotency PR was merged yesterday. That introduced the idempotency_keys table with SELECT FOR UPDATE."
+    },
+    {
+      "timestamp": "2024-10-23T11:24:00Z",
+      "author": "frank_nguyen",
+      "text": "The lock is held for the duration of the Stripe API call. Stripe takes 2-8 seconds. So you have a lock held for up to 8 seconds. If a retry comes in during that window \u2014 deadlock."
+    },
+    {
+      "timestamp": "2024-10-23T11:25:00Z",
+      "author": "grace_okonkwo",
+      "text": "And mobile clients retry aggressively. Each deadlock triggers 3 retries, which create more deadlocks. It's a feedback loop."
+    },
+    {
+      "timestamp": "2024-10-23T11:26:00Z",
+      "author": "bob_martinez",
+      "text": "I'm adding innodb_lock_wait_timeout=2 immediately. That'll at least fail fast instead of holding for 8 seconds."
+    },
+    {
+      "timestamp": "2024-10-23T11:28:00Z",
+      "author": "frank_nguyen",
+      "text": "Error rate still 18%. Failing faster but still failing."
+    },
+    {
+      "timestamp": "2024-10-23T11:29:00Z",
+      "author": "bob_martinez",
+      "text": "We need to fix the root cause. The Stripe call cannot happen inside a transaction holding a row lock. Replace SELECT FOR UPDATE with INSERT ... ON DUPLICATE KEY UPDATE."
+    },
+    {
+      "timestamp": "2024-10-23T11:44:00Z",
+      "author": "grace_okonkwo",
+      "text": "Fix deployed. Optimistic lock replaces pessimistic. Stripe call is now outside the transaction."
+    },
+    {
+      "timestamp": "2024-10-23T11:46:00Z",
+      "author": "bob_martinez",
+      "text": "Error rate dropping. 8%... 3%... 0.1%. Back to baseline."
+    },
+    {
+      "timestamp": "2024-10-23T11:48:00Z",
+      "author": "frank_nguyen",
+      "text": "Also pushed mobile SDK update with retry jitter (100-500ms random backoff). That'll reduce the thundering herd if we ever deadlock again."
+    },
+    {
+      "timestamp": "2024-10-23T11:50:00Z",
+      "author": "bob_martinez",
+      "text": "Confirmed stable. Writing incident report now."
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "incident_id": "INC-1018",
+  "title": "user-service password reset tokens expiring prematurely",
+  "service": "user-service",
+  "severity": "SEV3",
+  "timestamp": "2025-01-09T05:42:00Z",
+  "resolved_at": "2025-01-09T06:07:00Z",
+  "duration_minutes": 25,
+  "symptoms": [
+    "Users clicking password reset links within 5 minutes receiving 'token expired'",
+    "Token TTL shows as 0 seconds in Redis",
+    "Support volume up 3\u00d7 for password reset issues"
+  ],
+  "root_cause": "Token expiry calculation used datetime.utcnow() but Redis TTL was set using local server time (UTC+5:30). Net result: tokens expired 5.5 hours before they should, sometimes immediately.",
+  "resolution": "Standardized all timestamp generation to UTC. Used int(time.time()) for Redis TTL calculation. All servers confirmed to run in UTC timezone.",
+  "services_affected": [
+    "user-service",
+    "auth-service",
+    "checkout-service"
+  ],
+  "related_prs": [
+    "PR-135"
+  ],
+  "oncall_engineer": "carol_kim",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1018",
+  "scenario_id": null
+}

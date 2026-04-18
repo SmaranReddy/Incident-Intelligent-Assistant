@@ -1,0 +1,17 @@
+{
+  "pr_id": "PR-121",
+  "title": "perf: add database index on auth-service most-queried columns",
+  "service": "auth-service",
+  "summary": "Routine performance change for auth-service. No functional behavior changes.",
+  "files_changed": [
+    "db/migrations/add_indexes.sql"
+  ],
+  "author": "grace_okonkwo",
+  "reviewers": [
+    "jake_wilson",
+    "henry_silva"
+  ],
+  "merged_at": "2024-11-29T15:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": null
+}

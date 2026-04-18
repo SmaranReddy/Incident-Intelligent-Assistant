@@ -1,0 +1,27 @@
+{
+  "incident_id": "INC-1014",
+  "title": "payment-service refund endpoint returning 200 but not processing refund",
+  "service": "payment-service",
+  "severity": "SEV2",
+  "timestamp": "2024-12-19T21:54:00Z",
+  "resolved_at": "2024-12-19T22:24:00Z",
+  "duration_minutes": 30,
+  "symptoms": [
+    "POST /payments/{id}/refund returns HTTP 200 but refund_status stays as 'pending'",
+    "Stripe dashboard shows no refund initiated",
+    "Customer service: 80 tickets about refunds not appearing"
+  ],
+  "root_cause": "Exception in Stripe API call was silently caught and swallowed by a bare except: pass block introduced in error handling refactor. Endpoint returned 200 even on failure.",
+  "resolution": "Removed bare except: pass. Added proper exception handling with logging and 500 response. Manually initiated 80 pending refunds via Stripe dashboard.",
+  "services_affected": [
+    "payment-service",
+    "notification-service",
+    "order-service"
+  ],
+  "related_prs": [
+    "PR-143"
+  ],
+  "oncall_engineer": "dave_patel",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1014",
+  "scenario_id": null
+}

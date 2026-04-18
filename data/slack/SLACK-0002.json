@@ -1,0 +1,81 @@
+{
+  "thread_id": "SLACK-0002",
+  "incident_id": "INC-1001",
+  "service": "order-service",
+  "channel": "#incidents-order-service",
+  "thread_start": "2024-09-07T22:33:00Z",
+  "thread_end": "2024-09-07T23:15:00Z",
+  "participants": [
+    "alice_chen",
+    "pagerduty-bot",
+    "carol_kim",
+    "eve_thompson"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-09-07T22:33:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV1] order-service: error rate exceeded 50% for 5 minutes. Current: 88%."
+    },
+    {
+      "timestamp": "2024-09-07T22:37:00Z",
+      "author": "alice_chen",
+      "text": "On it. order-service is throwing 500s. DB connection errors in logs: 'QueuePool limit overflow'. Checking DB health."
+    },
+    {
+      "timestamp": "2024-09-07T22:39:00Z",
+      "author": "eve_thompson",
+      "text": "RDS metrics look fine \u2014 CPU at 22%, no long queries. This isn't a DB performance issue."
+    },
+    {
+      "timestamp": "2024-09-07T22:40:00Z",
+      "author": "alice_chen",
+      "text": "Connection pool is exhausted. Max 20 connections, all in use. Why are we using 20 connections simultaneously?"
+    },
+    {
+      "timestamp": "2024-09-07T22:42:00Z",
+      "author": "carol_kim",
+      "text": "There was a deploy 15 minutes ago. The inventory availability check PR. Let me look at it... oh no."
+    },
+    {
+      "timestamp": "2024-09-07T22:43:00Z",
+      "author": "carol_kim",
+      "text": "Found it. For every item in a cart, we're opening a new DB connection to inventory-service. Cart with 10 items = 10 concurrent connections. At 300 checkouts/min that's 3000 simultaneous connections."
+    },
+    {
+      "timestamp": "2024-09-07T22:44:00Z",
+      "author": "alice_chen",
+      "text": "And we have a connection pool of 20. We blow past that in like 2 orders. Plus connections aren't being closed on error paths."
+    },
+    {
+      "timestamp": "2024-09-07T22:45:00Z",
+      "author": "eve_thompson",
+      "text": "I'm looking at inventory_client.py. Yep. No finally block. Connection leaked on every exception."
+    },
+    {
+      "timestamp": "2024-09-07T22:46:00Z",
+      "author": "alice_chen",
+      "text": "Two fixes needed: 1) add finally: conn.close(), 2) batch the inventory lookups into a single query. Deploying fix 1 first as a hotfix."
+    },
+    {
+      "timestamp": "2024-09-07T22:49:00Z",
+      "author": "carol_kim",
+      "text": "Fix 1 deployed. Error rate dropping. Down to 35%."
+    },
+    {
+      "timestamp": "2024-09-07T22:51:00Z",
+      "author": "alice_chen",
+      "text": "Fix 2 deployed (batch query). Error rate at 1.2%. Back to normal. Phew."
+    },
+    {
+      "timestamp": "2024-09-07T22:53:00Z",
+      "author": "eve_thompson",
+      "text": "We should add a connection pool utilization alert. This would have fired 5 minutes before the incident escalated."
+    },
+    {
+      "timestamp": "2024-09-07T22:54:00Z",
+      "author": "alice_chen",
+      "text": "Agreed. Adding to postmortem. Also need load tests that simulate multi-item carts."
+    }
+  ]
+}

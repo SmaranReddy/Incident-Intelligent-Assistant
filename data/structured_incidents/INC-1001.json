@@ -1,0 +1,24 @@
+{
+  "incident_id": "INC-1001",
+  "service": "order-service",
+  "symptoms": [
+    "Error log: 'QueuePool limit overflow, max_overflow 0 current overflow 20'",
+    "Order creation success rate fell from 99.9% to 12% within 8 minutes of deploy",
+    "DB connection wait p99 jumped from 2 ms to 48 000 ms",
+    "inventory-service receiving 11× its normal request volume",
+    "Kubernetes pod restarts on order-service every ~4 minutes (liveness probe)"
+  ],
+  "hypotheses_tested": [
+    "DB performance issue",
+    "Connection pool exhaustion due to concurrent connections"
+  ],
+  "failed_attempts": [],
+  "confirmed_root_cause": "Each cart with N items now opens N concurrent DB connections in inventory-service, causing connection pool exhaustion due to a missing connection.close() in the error path",
+  "resolution_action": "Hotfix deployed: added finally: conn.close() in inventory_client.py, batched all per-item lookups into a single SELECT ... WHERE id IN (...) query, and increased pool size to 50 as temporary buffer",
+  "services_affected": [
+    "order-service",
+    "user-service",
+    "inventory-service"
+  ],
+  "confidence": 0.98
+}

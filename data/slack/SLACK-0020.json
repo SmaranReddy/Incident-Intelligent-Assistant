@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0020",
+  "incident_id": "INC-1019",
+  "service": "inventory-service",
+  "channel": "#incidents-inventory-service",
+  "thread_start": "2025-01-08T03:59:00Z",
+  "thread_end": "2025-01-08T04:21:00Z",
+  "participants": [
+    "dave_patel",
+    "bob_martinez",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-01-08T03:59:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV2] inventory-service: error rate exceeding SLO."
+    },
+    {
+      "timestamp": "2025-01-08T04:04:00Z",
+      "author": "dave_patel",
+      "text": "On it. inventory.stock_count reaching -47 for high-demand SKU. Checking recent changes."
+    },
+    {
+      "timestamp": "2025-01-08T04:07:00Z",
+      "author": "bob_martinez",
+      "text": "There was a deploy 20 minutes ago. Checking diff."
+    },
+    {
+      "timestamp": "2025-01-08T04:10:00Z",
+      "author": "dave_patel",
+      "text": "Root cause: Stock decrement used read-then-write pattern without atomic operation: read stoc.... Rolling back."
+    },
+    {
+      "timestamp": "2025-01-08T04:14:00Z",
+      "author": "bob_martinez",
+      "text": "Rollback successful. Error rate normalizing."
+    },
+    {
+      "timestamp": "2025-01-08T04:17:00Z",
+      "author": "dave_patel",
+      "text": "Incident closed. Postmortem scheduled for tomorrow."
+    }
+  ]
+}

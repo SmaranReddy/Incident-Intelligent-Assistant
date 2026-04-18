@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-112",
+  "title": "chore: update notification-service dependencies to latest patch versions",
+  "service": "notification-service",
+  "summary": "Routine dependency-update change for notification-service. No functional behavior changes.",
+  "files_changed": [
+    "requirements.txt",
+    "package.json"
+  ],
+  "author": "grace_okonkwo",
+  "reviewers": [
+    "eve_thompson",
+    "henry_silva"
+  ],
+  "merged_at": "2024-11-03T10:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

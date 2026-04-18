@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-140",
+  "title": "chore: upgrade Python base image from 3.11 to 3.12 in payment-service",
+  "service": "payment-service",
+  "summary": "Routine infra change for payment-service. No functional behavior changes.",
+  "files_changed": [
+    "Dockerfile",
+    ".github/workflows/ci.yml"
+  ],
+  "author": "grace_okonkwo",
+  "reviewers": [
+    "alice_chen",
+    "grace_okonkwo"
+  ],
+  "merged_at": "2025-01-16T11:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": null
+}

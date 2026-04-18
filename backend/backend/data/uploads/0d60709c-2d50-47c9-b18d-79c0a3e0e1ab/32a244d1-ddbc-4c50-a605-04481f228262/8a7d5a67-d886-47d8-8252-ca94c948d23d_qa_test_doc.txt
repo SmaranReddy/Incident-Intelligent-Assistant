@@ -1,0 +1,23 @@
+Enterprise Knowledge Management Policy
+
+1. Data Classification
+All company data must be classified into one of four categories:
+- Public: Information approved for external distribution.
+- Internal: General business information for employees only.
+- Confidential: Sensitive business data requiring restricted access.
+- Restricted: Highly sensitive data such as PII and financial records.
+
+2. Access Control
+Access to confidential and restricted data requires manager approval.
+All access requests must be submitted via the IT helpdesk portal.
+Multi-factor authentication is mandatory for restricted data access.
+
+3. Retention Policy
+Public and internal documents are retained for 3 years.
+Confidential documents are retained for 7 years.
+Restricted documents are retained for 10 years or as required by law.
+
+4. Incident Response
+Any suspected data breach must be reported to the security team within 24 hours.
+The incident response team will assess severity and notify affected parties.
+Post-incident reviews are mandatory for all Severity 1 incidents.

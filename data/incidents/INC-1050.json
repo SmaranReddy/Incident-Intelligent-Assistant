@@ -1,0 +1,30 @@
+{
+  "incident_id": "INC-1050",
+  "title": "payment-service Stripe webhook validation broken \u2014 orders stuck in payment_pending",
+  "service": "payment-service",
+  "severity": "SEV1",
+  "timestamp": "2025-01-10T01:00:00Z",
+  "resolved_at": "2024-10-15T21:36:00Z",
+  "duration_minutes": 105,
+  "symptoms": [
+    "Stripe dashboard: webhook delivery failure rate 100%, all returning HTTP 400",
+    "Order status stuck in 'payment_pending' for all orders since 14:32 UTC",
+    "Customers charged on Stripe but receiving no order confirmation",
+    "payment-service logs: 'SignatureVerificationError: No signatures found'",
+    "Support: 300+ tickets 'I was charged but my order disappeared'"
+  ],
+  "root_cause": "Stripe SDK v3.0.0 changed Webhook.construct_event() to require raw request bytes for HMAC verification. webhook_handler.py called request.json() (which parses then re-serializes the body) before passing to construct_event(). Re-serialization changes key ordering and whitespace, invalidating the HMAC. The 30-minute canary soak did not catch this because no Stripe webhooks were delivered to the canary instance during that window.",
+  "resolution": "Fix: changed request.json() to request.get_data(as_text=False) in webhook_handler.py. Replayed all failed webhook events from Stripe dashboard (Events API, last 6 hours). Manually reconciled 847 orders stuck in payment_pending. Added integration test using real raw bytes from Stripe test fixture, not reconstructed JSON.",
+  "services_affected": [
+    "payment-service",
+    "checkout-service",
+    "order-service",
+    "notification-service"
+  ],
+  "related_prs": [
+    "PR-107"
+  ],
+  "oncall_engineer": "carol_kim",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1007",
+  "scenario_id": null
+}

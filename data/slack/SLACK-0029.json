@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0029",
+  "incident_id": "INC-1028",
+  "service": "auth-service",
+  "channel": "#incidents-auth-service",
+  "thread_start": "2025-02-21T16:58:00Z",
+  "thread_end": "2025-02-21T17:20:00Z",
+  "participants": [
+    "dave_patel",
+    "bob_martinez",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-02-21T16:58:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV1] auth-service: alert threshold breached."
+    },
+    {
+      "timestamp": "2025-02-21T17:02:00Z",
+      "author": "dave_patel",
+      "text": "Checking. Looks like SSL handshake errors: 'certificate has expired or is not yet valid'. Investigating."
+    },
+    {
+      "timestamp": "2025-02-21T17:05:00Z",
+      "author": "bob_martinez",
+      "text": "I see it too. Could be related to recent deploy."
+    },
+    {
+      "timestamp": "2025-02-21T17:08:00Z",
+      "author": "dave_patel",
+      "text": "Found the issue: When the PR changed renewBefore from 30 days to 7 days, cert-manager re-evaluate.... Deploying fix."
+    },
+    {
+      "timestamp": "2025-02-21T17:12:00Z",
+      "author": "bob_martinez",
+      "text": "Fix deployed. Metrics recovering."
+    },
+    {
+      "timestamp": "2025-02-21T17:15:00Z",
+      "author": "dave_patel",
+      "text": "Confirmed resolved. Writing up incident report."
+    }
+  ]
+}

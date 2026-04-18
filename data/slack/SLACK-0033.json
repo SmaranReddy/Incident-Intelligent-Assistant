@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0033",
+  "incident_id": "INC-1032",
+  "service": "checkout-service",
+  "channel": "#incidents-checkout-service",
+  "thread_start": "2025-01-27T01:58:00Z",
+  "thread_end": "2025-01-27T02:20:00Z",
+  "participants": [
+    "carol_kim",
+    "iris_nakamura",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-01-27T01:58:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV2] checkout-service: error rate exceeding SLO."
+    },
+    {
+      "timestamp": "2025-01-27T02:03:00Z",
+      "author": "carol_kim",
+      "text": "On it. 47 customer support tickets in 2 hours: 'discount not showing at checkout'. Checking recent changes."
+    },
+    {
+      "timestamp": "2025-01-27T02:06:00Z",
+      "author": "iris_nakamura",
+      "text": "There was a deploy 20 minutes ago. Checking diff."
+    },
+    {
+      "timestamp": "2025-01-27T02:09:00Z",
+      "author": "carol_kim",
+      "text": "Root cause: The cache invalidation webhook began silently failing 6 days ago after a service.... Rolling back."
+    },
+    {
+      "timestamp": "2025-01-27T02:13:00Z",
+      "author": "iris_nakamura",
+      "text": "Rollback successful. Error rate normalizing."
+    },
+    {
+      "timestamp": "2025-01-27T02:16:00Z",
+      "author": "carol_kim",
+      "text": "Incident closed. Postmortem scheduled for tomorrow."
+    }
+  ]
+}

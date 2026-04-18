@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0013",
+  "incident_id": "INC-1012",
+  "service": "notification-service",
+  "channel": "#incidents-notification-service",
+  "thread_start": "2024-12-09T19:30:00Z",
+  "thread_end": "2024-12-09T19:52:00Z",
+  "participants": [
+    "alice_chen",
+    "jake_wilson",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-12-09T19:30:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV2] notification-service: alert threshold breached."
+    },
+    {
+      "timestamp": "2024-12-09T19:34:00Z",
+      "author": "alice_chen",
+      "text": "Checking. Looks like Users receiving 3\u20135 identical push notifications per order event. Investigating."
+    },
+    {
+      "timestamp": "2024-12-09T19:37:00Z",
+      "author": "jake_wilson",
+      "text": "I see it too. Could be related to recent deploy."
+    },
+    {
+      "timestamp": "2024-12-09T19:40:00Z",
+      "author": "alice_chen",
+      "text": "Found the issue: Kafka consumer group rebalance during deploy caused messages to be re-processed .... Deploying fix."
+    },
+    {
+      "timestamp": "2024-12-09T19:44:00Z",
+      "author": "jake_wilson",
+      "text": "Fix deployed. Metrics recovering."
+    },
+    {
+      "timestamp": "2024-12-09T19:47:00Z",
+      "author": "alice_chen",
+      "text": "Confirmed resolved. Writing up incident report."
+    }
+  ]
+}

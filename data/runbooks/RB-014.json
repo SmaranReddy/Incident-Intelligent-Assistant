@@ -1,0 +1,24 @@
+{
+  "runbook_id": "RB-014",
+  "title": "payment-service Silent Failure in Payment Processing",
+  "service": "payment-service",
+  "issue_type": "silent_exception_swallowing",
+  "last_updated": "2024-09-04T00:00:00Z",
+  "owner_team": "payment-eng",
+  "steps": [
+    "1. Confirm: POST /payments returns 200 but payment_status stays pending in DB.",
+    "2. Check Stripe dashboard for corresponding PaymentIntent \u2014 was it created?",
+    "3. Search code for bare except: pass or except Exception: return None patterns.",
+    "4. Add logging to all exception handlers: `except Exception as e: logger.error('Payment failed', exc_info=True)`",
+    "5. Replace silent failures with explicit error responses: return HTTP 500 with error details.",
+    "6. Deploy fix and verify: payment failures now return non-200 status codes.",
+    "7. Replay affected payments: identify orders with status='pending' and created_at during incident window.",
+    "8. For each affected order: manually trigger payment retry or notify customer.",
+    "9. Run integration test suite to catch any other silent failure patterns."
+  ],
+  "escalation": "Page payment-service oncall. Notify finance for reconciliation. Customer service needs list of affected orders.",
+  "related_runbooks": [
+    "RB-005",
+    "RB-006"
+  ]
+}

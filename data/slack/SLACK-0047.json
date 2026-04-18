@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0047",
+  "incident_id": "INC-1046",
+  "service": "auth-service",
+  "channel": "#incidents-auth-service",
+  "thread_start": "2025-02-21T13:58:00Z",
+  "thread_end": "2025-02-21T14:20:00Z",
+  "participants": [
+    "bob_martinez",
+    "dave_patel",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-02-21T13:58:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV2] auth-service: alert threshold breached."
+    },
+    {
+      "timestamp": "2025-02-21T14:02:00Z",
+      "author": "bob_martinez",
+      "text": "Checking. Looks like Kubernetes events: 'OOMKilled' on all 3 auth-service replicas in rotation. Investigating."
+    },
+    {
+      "timestamp": "2025-02-21T14:05:00Z",
+      "author": "dave_patel",
+      "text": "I see it too. Could be related to recent deploy."
+    },
+    {
+      "timestamp": "2025-02-21T14:08:00Z",
+      "author": "bob_martinez",
+      "text": "Found the issue: The PR description mis-estimated cache memory at ~50 MB. Actual decoded JWT obje.... Deploying fix."
+    },
+    {
+      "timestamp": "2025-02-21T14:12:00Z",
+      "author": "dave_patel",
+      "text": "Fix deployed. Metrics recovering."
+    },
+    {
+      "timestamp": "2025-02-21T14:15:00Z",
+      "author": "bob_martinez",
+      "text": "Confirmed resolved. Writing up incident report."
+    }
+  ]
+}

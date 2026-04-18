@@ -1,0 +1,23 @@
+{
+  "runbook_id": "RB-015",
+  "title": "gateway-api CORS Misconfiguration Blocking Clients",
+  "service": "gateway-api",
+  "issue_type": "cors_misconfiguration",
+  "last_updated": "2024-09-18T00:00:00Z",
+  "owner_team": "gateway-eng",
+  "steps": [
+    "1. Reproduce: check browser network tab for preflight (OPTIONS) request. Look for missing CORS headers.",
+    "2. Identify which Origin or header is being blocked: check Access-Control-Request-Headers in failed preflight.",
+    "3. Check nginx CORS config: `kubectl get configmap gateway-nginx-config -o yaml | grep -A10 cors`",
+    "4. Compare allowed headers list with headers being sent by the blocked client.",
+    "5. Add missing header to Access-Control-Allow-Headers in nginx config.",
+    "6. Also ensure Access-Control-Allow-Methods includes all required HTTP methods.",
+    "7. Apply config change and reload nginx: `kubectl rollout restart deployment/gateway-api`",
+    "8. Test: trigger preflight request from affected client and confirm 204 response with correct headers.",
+    "9. Add CORS smoke test to CI that verifies all known client headers are allowed."
+  ],
+  "escalation": "Page gateway-api oncall. Identify which app versions are affected and coordinate with mobile team on timeline.",
+  "related_runbooks": [
+    "RB-009"
+  ]
+}

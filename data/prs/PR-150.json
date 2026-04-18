@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-150",
+  "title": "refactor: extract inventory-service config loader into separate module",
+  "service": "inventory-service",
+  "summary": "Routine refactor change for inventory-service. No functional behavior changes.",
+  "files_changed": [
+    "src/config/loader.py",
+    "src/config/__init__.py"
+  ],
+  "author": "carol_kim",
+  "reviewers": [
+    "henry_silva",
+    "iris_nakamura"
+  ],
+  "merged_at": "2025-02-06T13:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": null
+}

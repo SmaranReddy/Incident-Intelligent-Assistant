@@ -1,0 +1,17 @@
+{
+  "pr_id": "PR-117",
+  "title": "perf: add database index on inventory-service most-queried columns",
+  "service": "inventory-service",
+  "summary": "Routine performance change for inventory-service. No functional behavior changes.",
+  "files_changed": [
+    "db/migrations/add_indexes.sql"
+  ],
+  "author": "kate_brennan",
+  "reviewers": [
+    "henry_silva",
+    "grace_okonkwo"
+  ],
+  "merged_at": "2024-11-14T12:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": null
+}

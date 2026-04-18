@@ -1,0 +1,17 @@
+{
+  "pr_id": "PR-151",
+  "title": "perf: add database index on payment-service most-queried columns",
+  "service": "payment-service",
+  "summary": "Routine performance change for payment-service. No functional behavior changes.",
+  "files_changed": [
+    "db/migrations/add_indexes.sql"
+  ],
+  "author": "eve_thompson",
+  "reviewers": [
+    "kate_brennan",
+    "bob_martinez"
+  ],
+  "merged_at": "2025-02-09T17:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": null
+}

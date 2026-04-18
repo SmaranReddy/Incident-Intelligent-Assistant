@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0048",
+  "incident_id": "INC-1047",
+  "service": "payment-service",
+  "channel": "#incidents-payment-service",
+  "thread_start": "2025-02-01T23:58:00Z",
+  "thread_end": "2025-02-02T00:20:00Z",
+  "participants": [
+    "dave_patel",
+    "frank_nguyen",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-02-01T23:58:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV1] payment-service: error rate exceeding SLO."
+    },
+    {
+      "timestamp": "2025-02-02T00:03:00Z",
+      "author": "dave_patel",
+      "text": "On it. MySQL: 'Deadlock found when trying to get lock; try restarting transaction'. Checking recent changes."
+    },
+    {
+      "timestamp": "2025-02-02T00:06:00Z",
+      "author": "frank_nguyen",
+      "text": "There was a deploy 20 minutes ago. Checking diff."
+    },
+    {
+      "timestamp": "2025-02-02T00:09:00Z",
+      "author": "dave_patel",
+      "text": "Root cause: The idempotency lock (SELECT FOR UPDATE on idempotency_keys) is held while waiti.... Rolling back."
+    },
+    {
+      "timestamp": "2025-02-02T00:13:00Z",
+      "author": "frank_nguyen",
+      "text": "Rollback successful. Error rate normalizing."
+    },
+    {
+      "timestamp": "2025-02-02T00:16:00Z",
+      "author": "dave_patel",
+      "text": "Incident closed. Postmortem scheduled for tomorrow."
+    }
+  ]
+}

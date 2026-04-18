@@ -1,0 +1,81 @@
+{
+  "thread_id": "SLACK-0001",
+  "incident_id": "INC-1000",
+  "service": "checkout-service",
+  "channel": "#incidents-checkout-service",
+  "thread_start": "2024-09-02T23:00:00Z",
+  "thread_end": "2024-09-02T23:42:00Z",
+  "participants": [
+    "pagerduty-bot",
+    "frank_nguyen",
+    "grace_okonkwo",
+    "bob_martinez"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-09-02T23:00:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV1] checkout-service: p99 latency exceeded 5000 ms SLO threshold. Runbook: https://wiki/checkout-latency"
+    },
+    {
+      "timestamp": "2024-09-02T23:03:00Z",
+      "author": "bob_martinez",
+      "text": "Taking this. Checking dashboards now."
+    },
+    {
+      "timestamp": "2024-09-02T23:05:00Z",
+      "author": "bob_martinez",
+      "text": "Seeing massive 429 spike on the ingress. This looks like the WAF or a DDoS. @frank_nguyen can you check CloudFlare?"
+    },
+    {
+      "timestamp": "2024-09-02T23:07:00Z",
+      "author": "frank_nguyen",
+      "text": "CloudFlare is clean. No traffic anomaly externally. Traffic profile looks normal."
+    },
+    {
+      "timestamp": "2024-09-02T23:09:00Z",
+      "author": "bob_martinez",
+      "text": "Interesting. So the 429s are being generated internally. Checking rate limiter metrics."
+    },
+    {
+      "timestamp": "2024-09-02T23:11:00Z",
+      "author": "grace_okonkwo",
+      "text": "Wait, there was a PR merged this morning \u2014 rate limiter config change. PR #112. Changing from sliding window to fixed window."
+    },
+    {
+      "timestamp": "2024-09-02T23:12:00Z",
+      "author": "bob_martinez",
+      "text": "Yeah I see it. Fixed window counter is global not per-user. As soon as we hit 100 req total in a minute window, EVERYONE gets blocked. Classic."
+    },
+    {
+      "timestamp": "2024-09-02T23:13:00Z",
+      "author": "frank_nguyen",
+      "text": "So we're throttling ourselves. The limit was meant to be per-user but it's actually shared. Yikes."
+    },
+    {
+      "timestamp": "2024-09-02T23:14:00Z",
+      "author": "bob_martinez",
+      "text": "Rolling back rate_limiter.py to previous commit. Deploying now."
+    },
+    {
+      "timestamp": "2024-09-02T23:17:00Z",
+      "author": "grace_okonkwo",
+      "text": "429s dropping. Latency recovering. Looks like the rollback is working."
+    },
+    {
+      "timestamp": "2024-09-02T23:19:00Z",
+      "author": "bob_martinez",
+      "text": "Confirmed. Error rate back to baseline. Incident resolved. Will write postmortem."
+    },
+    {
+      "timestamp": "2024-09-02T23:22:00Z",
+      "author": "frank_nguyen",
+      "text": "One thing I noticed \u2014 the test only covered a single-user scenario. We need a load test that validates multi-user behavior for rate limiter changes."
+    },
+    {
+      "timestamp": "2024-09-02T23:23:00Z",
+      "author": "bob_martinez",
+      "text": "Good catch. Adding that to the postmortem action items."
+    }
+  ]
+}

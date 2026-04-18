@@ -1,0 +1,17 @@
+{
+  "pr_id": "PR-111",
+  "title": "perf: add database index on notification-service most-queried columns",
+  "service": "notification-service",
+  "summary": "Routine performance change for notification-service. No functional behavior changes.",
+  "files_changed": [
+    "db/migrations/add_indexes.sql"
+  ],
+  "author": "alice_chen",
+  "reviewers": [
+    "kate_brennan",
+    "dave_patel"
+  ],
+  "merged_at": "2024-10-31T10:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": null
+}

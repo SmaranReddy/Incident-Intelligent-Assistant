@@ -1,0 +1,81 @@
+{
+  "thread_id": "SLACK-0005",
+  "incident_id": "INC-1004",
+  "service": "checkout-service",
+  "channel": "#incidents-checkout-service",
+  "thread_start": "2024-09-25T09:55:00Z",
+  "thread_end": "2024-09-25T10:37:00Z",
+  "participants": [
+    "liam_foster",
+    "alice_chen",
+    "pagerduty-bot",
+    "kate_brennan"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-09-25T09:55:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV2] checkout-service: revenue anomaly detected \u2014 14% below forecast for past 4 hours."
+    },
+    {
+      "timestamp": "2024-09-25T10:00:00Z",
+      "author": "alice_chen",
+      "text": "Revenue alert. Checking checkout error rates... looks normal. No 5xx spike. Customers are completing checkouts but... at wrong prices?"
+    },
+    {
+      "timestamp": "2024-09-25T10:02:00Z",
+      "author": "kate_brennan",
+      "text": "Support just escalated \u2014 47 tickets about flash sale discount not showing. The sale started at 09:00. It's 13:00 now."
+    },
+    {
+      "timestamp": "2024-09-25T10:03:00Z",
+      "author": "alice_chen",
+      "text": "Product page shows the discounted price. Cart shows full price. Smells like a caching issue."
+    },
+    {
+      "timestamp": "2024-09-25T10:05:00Z",
+      "author": "liam_foster",
+      "text": "Checked the price cache \u2014 it's serving prices from last night. Cache TTL was recently changed to 24h. But the webhook should bust the cache on price updates."
+    },
+    {
+      "timestamp": "2024-09-25T10:06:00Z",
+      "author": "alice_chen",
+      "text": "Let me check webhook delivery logs... oh. The webhook has been returning 401 for 6 days."
+    },
+    {
+      "timestamp": "2024-09-25T10:07:00Z",
+      "author": "kate_brennan",
+      "text": "The service account token was rotated in the security audit last week. Webhook was never updated. Silent failure \u2014 no alerting on the 401s."
+    },
+    {
+      "timestamp": "2024-09-25T10:08:00Z",
+      "author": "liam_foster",
+      "text": "So for 6 days all price updates have been going nowhere. The 24h TTL means the cache is serving week-old prices."
+    },
+    {
+      "timestamp": "2024-09-25T10:09:00Z",
+      "author": "alice_chen",
+      "text": "Two actions: 1) rotate webhook token right now, 2) flush the price cache entirely."
+    },
+    {
+      "timestamp": "2024-09-25T10:10:00Z",
+      "author": "alice_chen",
+      "text": "Token updated. Running cache flush... done. Prices are now current."
+    },
+    {
+      "timestamp": "2024-09-25T10:12:00Z",
+      "author": "kate_brennan",
+      "text": "Revenue recovering. Checkout prices now match product pages. Flash sale discount visible."
+    },
+    {
+      "timestamp": "2024-09-25T10:14:00Z",
+      "author": "liam_foster",
+      "text": "We need monitoring on that webhook. If it starts returning 4xx we need to know immediately, not 6 days later."
+    },
+    {
+      "timestamp": "2024-09-25T10:15:00Z",
+      "author": "alice_chen",
+      "text": "Also, the TTL change from 5min to 24h made the blast radius of a broken webhook enormous. We should revert TTL to 5min until we have proper invalidation health monitoring."
+    }
+  ]
+}

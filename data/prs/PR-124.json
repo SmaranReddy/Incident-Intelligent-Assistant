@@ -1,0 +1,17 @@
+{
+  "pr_id": "PR-124",
+  "title": "fix: handle timezone-aware datetimes in order-service serialization",
+  "service": "order-service",
+  "summary": "Routine bugfix change for order-service. No functional behavior changes.",
+  "files_changed": [
+    "src/serializers/datetime_serializer.py"
+  ],
+  "author": "bob_martinez",
+  "reviewers": [
+    "kate_brennan",
+    "eve_thompson"
+  ],
+  "merged_at": "2024-12-08T17:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

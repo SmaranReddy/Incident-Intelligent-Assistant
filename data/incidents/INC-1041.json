@@ -1,0 +1,29 @@
+{
+  "incident_id": "INC-1041",
+  "title": "order-service DB CPU at 100% \u2014 N+1 query regression in order history",
+  "service": "order-service",
+  "severity": "SEV2",
+  "timestamp": "2025-01-18T12:00:00Z",
+  "resolved_at": "2024-10-03T18:20:00Z",
+  "duration_minutes": 91,
+  "symptoms": [
+    "Primary DB CPU jumped from 18% to 99% within 12 minutes of deploy",
+    "Slow query log: 80 000 individual SELECT on products table per minute",
+    "GET /orders/history p99 latency: 140 ms \u2192 9 200 ms",
+    "Read replica replication lag: 52 seconds behind primary",
+    "DB connection pool at 97% \u2014 downstream services starting to queue"
+  ],
+  "root_cause": "ProductService.get_by_id() is called once per order item in a Python for-loop, issuing one SELECT per call. A user with 20 orders \u00d7 6 items = 120 individual SELECTs per page load. At peak of 700 concurrent users loading order history: 84 000 queries/minute against a DB cluster tuned for 6 000 queries/minute. The test suite used a fixture with 1 order \u00d7 1 item, masking the N+1 completely.",
+  "resolution": "Hotfix: replaced loop with single SELECT ... WHERE id IN (all_item_ids) batch query. Deployed behind feature flag, validated 99.8% query reduction in staging. DB CPU back to 16% within 3 minutes of hotfix. Added query count assertion to integration test: assert mock_db.call_count == 1.",
+  "services_affected": [
+    "order-service",
+    "user-service",
+    "inventory-service"
+  ],
+  "related_prs": [
+    "PR-105"
+  ],
+  "oncall_engineer": "dave_patel",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1005",
+  "scenario_id": null
+}

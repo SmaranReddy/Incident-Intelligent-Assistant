@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0015",
+  "incident_id": "INC-1014",
+  "service": "payment-service",
+  "channel": "#incidents-payment-service",
+  "thread_start": "2024-12-19T21:52:00Z",
+  "thread_end": "2024-12-19T22:14:00Z",
+  "participants": [
+    "dave_patel",
+    "bob_martinez",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-12-19T21:52:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV2] payment-service: alert threshold breached."
+    },
+    {
+      "timestamp": "2024-12-19T21:56:00Z",
+      "author": "dave_patel",
+      "text": "Checking. Looks like POST /payments/{id}/refund returns HTTP 200 but refund_status stays as 'pending'. Investigating."
+    },
+    {
+      "timestamp": "2024-12-19T21:59:00Z",
+      "author": "bob_martinez",
+      "text": "I see it too. Could be related to recent deploy."
+    },
+    {
+      "timestamp": "2024-12-19T22:02:00Z",
+      "author": "dave_patel",
+      "text": "Found the issue: Exception in Stripe API call was silently caught and swallowed by a bare except:.... Deploying fix."
+    },
+    {
+      "timestamp": "2024-12-19T22:06:00Z",
+      "author": "bob_martinez",
+      "text": "Fix deployed. Metrics recovering."
+    },
+    {
+      "timestamp": "2024-12-19T22:09:00Z",
+      "author": "dave_patel",
+      "text": "Confirmed resolved. Writing up incident report."
+    }
+  ]
+}

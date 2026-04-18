@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0036",
+  "incident_id": "INC-1035",
+  "service": "notification-service",
+  "channel": "#incidents-notification-service",
+  "thread_start": "2025-01-23T21:58:00Z",
+  "thread_end": "2025-01-23T22:20:00Z",
+  "participants": [
+    "bob_martinez",
+    "frank_nguyen",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-01-23T21:58:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV1] notification-service: alert threshold breached."
+    },
+    {
+      "timestamp": "2025-01-23T22:02:00Z",
+      "author": "bob_martinez",
+      "text": "Checking. Looks like SendGrid API returning 503 with message 'too many requests from single source'. Investigating."
+    },
+    {
+      "timestamp": "2025-01-23T22:05:00Z",
+      "author": "frank_nguyen",
+      "text": "I see it too. Could be related to recent deploy."
+    },
+    {
+      "timestamp": "2025-01-23T22:08:00Z",
+      "author": "bob_martinez",
+      "text": "Found the issue: SendGrid had a 20-minute partial outage. Without circuit breaking, all 2 000 wor.... Deploying fix."
+    },
+    {
+      "timestamp": "2025-01-23T22:12:00Z",
+      "author": "frank_nguyen",
+      "text": "Fix deployed. Metrics recovering."
+    },
+    {
+      "timestamp": "2025-01-23T22:15:00Z",
+      "author": "bob_martinez",
+      "text": "Confirmed resolved. Writing up incident report."
+    }
+  ]
+}

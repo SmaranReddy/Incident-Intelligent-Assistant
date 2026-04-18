@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-116",
+  "title": "refactor: extract payment-service config loader into separate module",
+  "service": "payment-service",
+  "summary": "Routine refactor change for payment-service. No functional behavior changes.",
+  "files_changed": [
+    "src/config/loader.py",
+    "src/config/__init__.py"
+  ],
+  "author": "grace_okonkwo",
+  "reviewers": [
+    "eve_thompson",
+    "bob_martinez"
+  ],
+  "merged_at": "2024-11-12T14:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": null
+}

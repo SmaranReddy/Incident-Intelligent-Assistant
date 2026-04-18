@@ -1,0 +1,24 @@
+{
+  "runbook_id": "RB-002",
+  "title": "order-service Database Connection Pool Exhaustion",
+  "service": "order-service",
+  "issue_type": "database_connection_exhaustion",
+  "last_updated": "2024-09-19T00:00:00Z",
+  "owner_team": "order-eng",
+  "steps": [
+    "1. Confirm connection pool exhaustion: check logs for 'QueuePool limit overflow' or 'connection pool exhausted'.",
+    "2. Get current pool utilization: `kubectl exec -it <pod> -- curl localhost:9090/metrics | grep db_pool`",
+    "3. Identify which query is holding connections: query `information_schema.processlist` on RDS.",
+    "4. Check for connection leaks: look for connections in 'Sleep' state held >30s.",
+    "5. If leak found: restart affected pods to flush leaked connections: `kubectl rollout restart deployment/order-service`",
+    "6. As emergency measure: increase pool size via env var `DB_POOL_SIZE=50` and redeploy.",
+    "7. Identify root cause: check recent deploys for new DB-touching code paths. Look for missing connection.close().",
+    "8. If N+1 query suspected: check slow query log for repeated single-row SELECTs on same table.",
+    "9. Deploy fix or rollback if root cause identified.",
+    "10. Add monitoring alert: `db_pool_utilization > 0.75` should page before full exhaustion."
+  ],
+  "escalation": "Page order-service oncall. Alert DBA team if RDS CPU >80%. Notify #incidents for SEV1.",
+  "related_runbooks": [
+    "RB-010"
+  ]
+}

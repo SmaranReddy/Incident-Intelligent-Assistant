@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-120",
+  "title": "chore: update payment-service dependencies to latest patch versions",
+  "service": "payment-service",
+  "summary": "Routine dependency-update change for payment-service. No functional behavior changes.",
+  "files_changed": [
+    "requirements.txt",
+    "package.json"
+  ],
+  "author": "carol_kim",
+  "reviewers": [
+    "kate_brennan",
+    "carol_kim"
+  ],
+  "merged_at": "2024-11-25T10:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0042",
+  "incident_id": "INC-1041",
+  "service": "order-service",
+  "channel": "#incidents-order-service",
+  "thread_start": "2025-01-18T11:58:00Z",
+  "thread_end": "2025-01-18T12:20:00Z",
+  "participants": [
+    "dave_patel",
+    "carol_kim",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-01-18T11:58:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV2] order-service: error rate exceeding SLO."
+    },
+    {
+      "timestamp": "2025-01-18T12:03:00Z",
+      "author": "dave_patel",
+      "text": "On it. Primary DB CPU jumped from 18% to 99% within 12 minutes of deploy. Checking recent changes."
+    },
+    {
+      "timestamp": "2025-01-18T12:06:00Z",
+      "author": "carol_kim",
+      "text": "There was a deploy 20 minutes ago. Checking diff."
+    },
+    {
+      "timestamp": "2025-01-18T12:09:00Z",
+      "author": "dave_patel",
+      "text": "Root cause: ProductService.get_by_id() is called once per order item in a Python for-loop, i.... Rolling back."
+    },
+    {
+      "timestamp": "2025-01-18T12:13:00Z",
+      "author": "carol_kim",
+      "text": "Rollback successful. Error rate normalizing."
+    },
+    {
+      "timestamp": "2025-01-18T12:16:00Z",
+      "author": "dave_patel",
+      "text": "Incident closed. Postmortem scheduled for tomorrow."
+    }
+  ]
+}

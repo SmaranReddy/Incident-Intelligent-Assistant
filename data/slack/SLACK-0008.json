@@ -1,0 +1,81 @@
+{
+  "thread_id": "SLACK-0008",
+  "incident_id": "INC-1007",
+  "service": "payment-service",
+  "channel": "#incidents-payment-service",
+  "thread_start": "2024-10-15T19:49:00Z",
+  "thread_end": "2024-10-15T20:31:00Z",
+  "participants": [
+    "alice_chen",
+    "pagerduty-bot",
+    "grace_okonkwo",
+    "dave_patel"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-10-15T19:49:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV1] payment-service: webhook endpoint returning HTTP 400 for 100% of Stripe events."
+    },
+    {
+      "timestamp": "2024-10-15T19:53:00Z",
+      "author": "alice_chen",
+      "text": "Stripe webhooks all failing with 400. Checking payment-service logs."
+    },
+    {
+      "timestamp": "2024-10-15T19:54:00Z",
+      "author": "grace_okonkwo",
+      "text": "Logs: 'SignatureVerificationError: No signatures found matching the expected signature for payload'. Webhook signature validation is broken."
+    },
+    {
+      "timestamp": "2024-10-15T19:55:00Z",
+      "author": "alice_chen",
+      "text": "Did Stripe change their signing format? Checking Stripe changelog... no changes on their side."
+    },
+    {
+      "timestamp": "2024-10-15T19:56:00Z",
+      "author": "dave_patel",
+      "text": "payment-service had a deploy this afternoon. Stripe SDK v3 upgrade. Let me check the v3 migration guide."
+    },
+    {
+      "timestamp": "2024-10-15T19:58:00Z",
+      "author": "dave_patel",
+      "text": "Found it. v3 changelog says: 'construct_event() now requires raw bytes, not parsed string'. We're passing request.json() which re-serializes the body."
+    },
+    {
+      "timestamp": "2024-10-15T19:59:00Z",
+      "author": "alice_chen",
+      "text": "Re-serialization changes whitespace and key ordering. HMAC over different bytes = signature mismatch. Every time."
+    },
+    {
+      "timestamp": "2024-10-15T20:00:00Z",
+      "author": "grace_okonkwo",
+      "text": "And the canary didn't catch this because no webhooks were delivered to the canary instance during the 30-min soak window."
+    },
+    {
+      "timestamp": "2024-10-15T20:01:00Z",
+      "author": "alice_chen",
+      "text": "Fix: change request.json() to request.get_data(as_text=False). Deploying hotfix."
+    },
+    {
+      "timestamp": "2024-10-15T20:04:00Z",
+      "author": "dave_patel",
+      "text": "Stripe webhooks now returning 200. Webhook delivery recovering."
+    },
+    {
+      "timestamp": "2024-10-15T20:05:00Z",
+      "author": "alice_chen",
+      "text": "Now we need to replay missed events. Pulling event IDs from Stripe API for the last 6 hours."
+    },
+    {
+      "timestamp": "2024-10-15T20:11:00Z",
+      "author": "grace_okonkwo",
+      "text": "847 events replayed. Order statuses reconciled. Revenue impact under assessment."
+    },
+    {
+      "timestamp": "2024-10-15T20:13:00Z",
+      "author": "alice_chen",
+      "text": "Lesson: mock-based webhook tests don't catch raw-vs-parsed body issues. We need integration tests with actual raw bytes from Stripe fixtures."
+    }
+  ]
+}

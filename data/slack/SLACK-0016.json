@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0016",
+  "incident_id": "INC-1015",
+  "service": "checkout-service",
+  "channel": "#incidents-checkout-service",
+  "thread_start": "2024-12-24T22:16:00Z",
+  "thread_end": "2024-12-24T22:38:00Z",
+  "participants": [
+    "dave_patel",
+    "henry_silva",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-12-24T22:16:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV2] checkout-service: error rate exceeding SLO."
+    },
+    {
+      "timestamp": "2024-12-24T22:21:00Z",
+      "author": "dave_patel",
+      "text": "On it. B2B customers reporting incorrect discount tiers applied at checkout. Checking recent changes."
+    },
+    {
+      "timestamp": "2024-12-24T22:24:00Z",
+      "author": "henry_silva",
+      "text": "There was a deploy 20 minutes ago. Checking diff."
+    },
+    {
+      "timestamp": "2024-12-24T22:27:00Z",
+      "author": "dave_patel",
+      "text": "Root cause: Off-by-one error in discount tier boundary check. Condition was cart.quantity > .... Rolling back."
+    },
+    {
+      "timestamp": "2024-12-24T22:31:00Z",
+      "author": "henry_silva",
+      "text": "Rollback successful. Error rate normalizing."
+    },
+    {
+      "timestamp": "2024-12-24T22:34:00Z",
+      "author": "dave_patel",
+      "text": "Incident closed. Postmortem scheduled for tomorrow."
+    }
+  ]
+}

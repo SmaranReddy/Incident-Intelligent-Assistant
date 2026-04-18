@@ -1,0 +1,19 @@
+{
+  "pr_id": "PR-104",
+  "title": "perf: extend product price cache TTL from 5 min to 24 h",
+  "service": "checkout-service",
+  "summary": "Price cache hit rate is 24% due to aggressive 5-minute TTL. Prices change at most once per day per marketing ops. Extending TTL to 24 h will raise hit rate to ~96% and reduce load on pricing-service by 12\u00d7. Cache busting on price updates handled by existing webhook in price_update_handler.py.",
+  "files_changed": [
+    "src/cache/price_cache.py",
+    "config/cache_config.yaml",
+    "src/webhooks/price_update_handler.py"
+  ],
+  "author": "iris_nakamura",
+  "reviewers": [
+    "dave_patel",
+    "kate_brennan"
+  ],
+  "merged_at": "2024-09-23T09:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": "stale_price_cache"
+}

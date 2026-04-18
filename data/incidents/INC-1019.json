@@ -1,0 +1,27 @@
+{
+  "incident_id": "INC-1019",
+  "title": "inventory-service stock count going negative due to race condition",
+  "service": "inventory-service",
+  "severity": "SEV2",
+  "timestamp": "2025-01-08T04:01:00Z",
+  "resolved_at": "2025-01-08T04:21:00Z",
+  "duration_minutes": 20,
+  "symptoms": [
+    "inventory.stock_count reaching -47 for high-demand SKU",
+    "Overselling: 47 orders for an item with 0 remaining stock",
+    "Warehouse team unable to fulfill 47 orders"
+  ],
+  "root_cause": "Stock decrement used read-then-write pattern without atomic operation: read stock, check > 0, subtract 1, write back. Under concurrent checkouts, multiple threads read stock > 0 simultaneously and all decrement, yielding negative values.",
+  "resolution": "Replaced read-then-write with UPDATE inventory SET stock = stock - 1 WHERE id = ? AND stock > 0. Affected orders manually cancelled with customer notification.",
+  "services_affected": [
+    "inventory-service",
+    "checkout-service",
+    "order-service"
+  ],
+  "related_prs": [
+    "PR-117"
+  ],
+  "oncall_engineer": "dave_patel",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1019",
+  "scenario_id": null
+}

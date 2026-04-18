@@ -1,0 +1,17 @@
+{
+  "pr_id": "PR-144",
+  "title": "fix: correct typo in auth-service API documentation",
+  "service": "auth-service",
+  "summary": "Routine docs change for auth-service. No functional behavior changes.",
+  "files_changed": [
+    "docs/api_reference.md"
+  ],
+  "author": "bob_martinez",
+  "reviewers": [
+    "jake_wilson",
+    "bob_martinez"
+  ],
+  "merged_at": "2025-01-26T11:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

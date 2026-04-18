@@ -1,0 +1,19 @@
+{
+  "pr_id": "PR-106",
+  "title": "chore: update cert-manager renewal window from 30 days to 7 days",
+  "service": "auth-service",
+  "summary": "Aligns with new security policy requiring shorter certificate lifetime awareness. cert-manager CertificateRequest resource updated. Tested in staging \u2014 cert-manager picked up the new renewBefore and issued a new cert within 5 minutes.",
+  "files_changed": [
+    "k8s/cert-manager/certificate.yaml",
+    "scripts/cert_health_check.sh",
+    "docs/tls_management.md"
+  ],
+  "author": "alice_chen",
+  "reviewers": [
+    "carol_kim",
+    "grace_okonkwo"
+  ],
+  "merged_at": "2024-10-08T13:00:00Z",
+  "risk_level": "high",
+  "scenario_id": "tls_cert_expiry"
+}

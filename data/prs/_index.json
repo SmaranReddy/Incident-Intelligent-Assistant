@@ -1,0 +1,989 @@
+[
+  {
+    "pr_id": "PR-100",
+    "title": "feat: tighten rate limits on checkout-service to prevent API abuse",
+    "service": "checkout-service",
+    "summary": "Reduces per-user rate limit from 1 000 req/min to 100 req/min following an observed scraping campaign. Also migrates rate limiter from Redis-based sliding window algorithm to a simpler fixed-window counter for operational simplicity. Burst allowance of 2\u00d7 removed.",
+    "files_changed": [
+      "src/middleware/rate_limiter.py",
+      "config/rate_limits.yaml",
+      "tests/test_rate_limiter.py"
+    ],
+    "author": "alice_chen",
+    "reviewers": [
+      "liam_foster",
+      "eve_thompson"
+    ],
+    "merged_at": "2024-09-01T10:00:00Z",
+    "risk_level": "high",
+    "scenario_id": "rate_limiter_misconfiguration"
+  },
+  {
+    "pr_id": "PR-101",
+    "title": "feat: add synchronous inventory availability checks during order placement",
+    "service": "order-service",
+    "summary": "Calls inventory-service for each line item synchronously before confirming an order to prevent overselling. Previously the check was async and best-effort. Each cart item now triggers one DB lookup in inventory-service. Connection pool size unchanged at 20.",
+    "files_changed": [
+      "src/services/order_validator.py",
+      "src/clients/inventory_client.py",
+      "config/database.yaml",
+      "tests/test_order_validator.py"
+    ],
+    "author": "carol_kim",
+    "reviewers": [
+      "liam_foster",
+      "bob_martinez"
+    ],
+    "merged_at": "2024-09-05T12:00:00Z",
+    "risk_level": "high",
+    "scenario_id": "connection_pool_exhaustion"
+  },
+  {
+    "pr_id": "PR-102",
+    "title": "perf: cache decoded JWT payloads to reduce redundant CPU overhead",
+    "service": "auth-service",
+    "summary": "JWT decode was identified as 15% of auth-service CPU in profiling. Adding an in-process LRU cache keyed by token signature. Max entries: 50 000. No TTL set \u2014 tokens carry their own exp claim. Memory impact estimated at ~50 MB at full cache capacity per calculation in PR description.",
+    "files_changed": [
+      "src/auth/jwt_validator.py",
+      "src/auth/token_cache.py",
+      "config/auth_config.yaml",
+      "tests/test_jwt_validator.py"
+    ],
+    "author": "bob_martinez",
+    "reviewers": [
+      "jake_wilson",
+      "grace_okonkwo"
+    ],
+    "merged_at": "2024-09-13T17:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": "memory_leak_jwt_cache"
+  },
+  {
+    "pr_id": "PR-103",
+    "title": "refactor: remove deprecated Hystrix circuit breaker from notification pipeline",
+    "service": "notification-service",
+    "summary": "Hystrix is EOL and flagged by our dependency scanner. Removing it from the notification dispatcher as part of the Hystrix deprecation project. Notification delivery is best-effort so circuit breaking was considered unnecessary overhead. Resilience4j migration tracked in NOTIF-412.",
+    "files_changed": [
+      "src/pipeline/notification_dispatcher.py",
+      "src/resilience/circuit_breaker.py",
+      "config/notification_config.yaml",
+      "requirements.txt"
+    ],
+    "author": "bob_martinez",
+    "reviewers": [
+      "dave_patel",
+      "liam_foster"
+    ],
+    "merged_at": "2024-09-16T09:00:00Z",
+    "risk_level": "high",
+    "scenario_id": "circuit_breaker_removed"
+  },
+  {
+    "pr_id": "PR-104",
+    "title": "perf: extend product price cache TTL from 5 min to 24 h",
+    "service": "checkout-service",
+    "summary": "Price cache hit rate is 24% due to aggressive 5-minute TTL. Prices change at most once per day per marketing ops. Extending TTL to 24 h will raise hit rate to ~96% and reduce load on pricing-service by 12\u00d7. Cache busting on price updates handled by existing webhook in price_update_handler.py.",
+    "files_changed": [
+      "src/cache/price_cache.py",
+      "config/cache_config.yaml",
+      "src/webhooks/price_update_handler.py"
+    ],
+    "author": "iris_nakamura",
+    "reviewers": [
+      "dave_patel",
+      "kate_brennan"
+    ],
+    "merged_at": "2024-09-23T09:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": "stale_price_cache"
+  },
+  {
+    "pr_id": "PR-105",
+    "title": "feat: enrich order history API with product metadata server-side",
+    "service": "order-service",
+    "summary": "Currently /orders/history returns only product IDs; the mobile client makes N individual /products/{id} calls to render the page. Moving this server-side to reduce mobile chattiness and improve load time on 3G. Uses existing ProductService.get_by_id() in a loop for simplicity.",
+    "files_changed": [
+      "src/api/order_history.py",
+      "src/services/product_enrichment.py",
+      "tests/test_order_history.py"
+    ],
+    "author": "grace_okonkwo",
+    "reviewers": [
+      "dave_patel",
+      "henry_silva"
+    ],
+    "merged_at": "2024-10-01T17:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": "n_plus_one_query"
+  },
+  {
+    "pr_id": "PR-106",
+    "title": "chore: update cert-manager renewal window from 30 days to 7 days",
+    "service": "auth-service",
+    "summary": "Aligns with new security policy requiring shorter certificate lifetime awareness. cert-manager CertificateRequest resource updated. Tested in staging \u2014 cert-manager picked up the new renewBefore and issued a new cert within 5 minutes.",
+    "files_changed": [
+      "k8s/cert-manager/certificate.yaml",
+      "scripts/cert_health_check.sh",
+      "docs/tls_management.md"
+    ],
+    "author": "alice_chen",
+    "reviewers": [
+      "carol_kim",
+      "grace_okonkwo"
+    ],
+    "merged_at": "2024-10-08T13:00:00Z",
+    "risk_level": "high",
+    "scenario_id": "tls_cert_expiry"
+  },
+  {
+    "pr_id": "PR-107",
+    "title": "chore: upgrade Stripe SDK from v2.1.3 to v3.0.0",
+    "service": "payment-service",
+    "summary": "v3.x required for BNPL and crypto payment methods on Q4 roadmap. Breaking changes in CHANGELOG: error class hierarchy changed, webhook signature verification API updated. All 47 tests passing. Staged deployment to payment-service-canary confirmed no errors in 30-minute soak.",
+    "files_changed": [
+      "requirements.txt",
+      "src/payments/stripe_client.py",
+      "src/payments/webhook_handler.py",
+      "tests/test_payments.py"
+    ],
+    "author": "carol_kim",
+    "reviewers": [
+      "dave_patel",
+      "frank_nguyen"
+    ],
+    "merged_at": "2024-10-13T13:00:00Z",
+    "risk_level": "high",
+    "scenario_id": "sdk_major_version_upgrade"
+  },
+  {
+    "pr_id": "PR-108",
+    "title": "infra: increase read timeout for ML recommendations endpoint to 30 s",
+    "service": "gateway-api",
+    "summary": "New ML inference endpoint /api/v2/recommendations can take 6\u20138 s for cold requests. Current 3 s gateway timeout causes premature 504s. Increasing proxy_read_timeout to 30 s. Change scoped to /api/v2/recommendations only.",
+    "files_changed": [
+      "k8s/gateway/nginx.conf",
+      "k8s/gateway/configmap.yaml",
+      "terraform/gateway_lb.tf"
+    ],
+    "author": "grace_okonkwo",
+    "reviewers": [
+      "bob_martinez",
+      "frank_nguyen"
+    ],
+    "merged_at": "2024-10-16T10:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": "nginx_timeout_config_drift"
+  },
+  {
+    "pr_id": "PR-109",
+    "title": "feat: add idempotency key support to payment API to prevent duplicate charges",
+    "service": "payment-service",
+    "summary": "Mobile clients retry payment requests on network failure, causing duplicate charges. Implementing idempotency keys via DB row lock on idempotency_keys table. Lock is held for the duration of the Stripe API call to ensure exactly-once semantics. Includes DB migration adding the idempotency_keys table.",
+    "files_changed": [
+      "src/payments/idempotency.py",
+      "db/migrations/0042_add_idempotency_keys_table.sql",
+      "src/api/payment_endpoints.py",
+      "tests/test_idempotency.py"
+    ],
+    "author": "alice_chen",
+    "reviewers": [
+      "liam_foster",
+      "henry_silva"
+    ],
+    "merged_at": "2024-10-21T13:00:00Z",
+    "risk_level": "high",
+    "scenario_id": "idempotency_deadlock"
+  },
+  {
+    "pr_id": "PR-110",
+    "title": "chore: update user-service dependencies to latest patch versions",
+    "service": "user-service",
+    "summary": "Routine dependency-update change for user-service. No functional behavior changes.",
+    "files_changed": [
+      "requirements.txt",
+      "package.json"
+    ],
+    "author": "iris_nakamura",
+    "reviewers": [
+      "eve_thompson",
+      "kate_brennan"
+    ],
+    "merged_at": "2024-10-28T10:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-111",
+    "title": "perf: add database index on notification-service most-queried columns",
+    "service": "notification-service",
+    "summary": "Routine performance change for notification-service. No functional behavior changes.",
+    "files_changed": [
+      "db/migrations/add_indexes.sql"
+    ],
+    "author": "alice_chen",
+    "reviewers": [
+      "kate_brennan",
+      "dave_patel"
+    ],
+    "merged_at": "2024-10-31T10:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-112",
+    "title": "chore: update notification-service dependencies to latest patch versions",
+    "service": "notification-service",
+    "summary": "Routine dependency-update change for notification-service. No functional behavior changes.",
+    "files_changed": [
+      "requirements.txt",
+      "package.json"
+    ],
+    "author": "grace_okonkwo",
+    "reviewers": [
+      "eve_thompson",
+      "henry_silva"
+    ],
+    "merged_at": "2024-11-03T10:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-113",
+    "title": "test: add unit tests for inventory-service input validation layer",
+    "service": "inventory-service",
+    "summary": "Routine test change for inventory-service. No functional behavior changes.",
+    "files_changed": [
+      "tests/test_validation.py"
+    ],
+    "author": "dave_patel",
+    "reviewers": [
+      "kate_brennan",
+      "eve_thompson"
+    ],
+    "merged_at": "2024-11-06T14:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-114",
+    "title": "perf: add database index on order-service most-queried columns",
+    "service": "order-service",
+    "summary": "Routine performance change for order-service. No functional behavior changes.",
+    "files_changed": [
+      "db/migrations/add_indexes.sql"
+    ],
+    "author": "liam_foster",
+    "reviewers": [
+      "dave_patel",
+      "carol_kim"
+    ],
+    "merged_at": "2024-11-07T17:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-115",
+    "title": "chore: upgrade Python base image from 3.11 to 3.12 in checkout-service",
+    "service": "checkout-service",
+    "summary": "Routine infra change for checkout-service. No functional behavior changes.",
+    "files_changed": [
+      "Dockerfile",
+      ".github/workflows/ci.yml"
+    ],
+    "author": "dave_patel",
+    "reviewers": [
+      "kate_brennan",
+      "frank_nguyen"
+    ],
+    "merged_at": "2024-11-11T17:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-116",
+    "title": "refactor: extract payment-service config loader into separate module",
+    "service": "payment-service",
+    "summary": "Routine refactor change for payment-service. No functional behavior changes.",
+    "files_changed": [
+      "src/config/loader.py",
+      "src/config/__init__.py"
+    ],
+    "author": "grace_okonkwo",
+    "reviewers": [
+      "eve_thompson",
+      "bob_martinez"
+    ],
+    "merged_at": "2024-11-12T14:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-117",
+    "title": "perf: add database index on inventory-service most-queried columns",
+    "service": "inventory-service",
+    "summary": "Routine performance change for inventory-service. No functional behavior changes.",
+    "files_changed": [
+      "db/migrations/add_indexes.sql"
+    ],
+    "author": "kate_brennan",
+    "reviewers": [
+      "henry_silva",
+      "grace_okonkwo"
+    ],
+    "merged_at": "2024-11-14T12:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-118",
+    "title": "test: add unit tests for checkout-service input validation layer",
+    "service": "checkout-service",
+    "summary": "Routine test change for checkout-service. No functional behavior changes.",
+    "files_changed": [
+      "tests/test_validation.py"
+    ],
+    "author": "dave_patel",
+    "reviewers": [
+      "liam_foster",
+      "iris_nakamura"
+    ],
+    "merged_at": "2024-11-18T11:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-119",
+    "title": "perf: add database index on user-service most-queried columns",
+    "service": "user-service",
+    "summary": "Routine performance change for user-service. No functional behavior changes.",
+    "files_changed": [
+      "db/migrations/add_indexes.sql"
+    ],
+    "author": "frank_nguyen",
+    "reviewers": [
+      "dave_patel",
+      "carol_kim"
+    ],
+    "merged_at": "2024-11-21T15:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-120",
+    "title": "chore: update payment-service dependencies to latest patch versions",
+    "service": "payment-service",
+    "summary": "Routine dependency-update change for payment-service. No functional behavior changes.",
+    "files_changed": [
+      "requirements.txt",
+      "package.json"
+    ],
+    "author": "carol_kim",
+    "reviewers": [
+      "kate_brennan",
+      "carol_kim"
+    ],
+    "merged_at": "2024-11-25T10:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-121",
+    "title": "perf: add database index on auth-service most-queried columns",
+    "service": "auth-service",
+    "summary": "Routine performance change for auth-service. No functional behavior changes.",
+    "files_changed": [
+      "db/migrations/add_indexes.sql"
+    ],
+    "author": "grace_okonkwo",
+    "reviewers": [
+      "jake_wilson",
+      "henry_silva"
+    ],
+    "merged_at": "2024-11-29T15:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-122",
+    "title": "fix: handle timezone-aware datetimes in payment-service serialization",
+    "service": "payment-service",
+    "summary": "Routine bugfix change for payment-service. No functional behavior changes.",
+    "files_changed": [
+      "src/serializers/datetime_serializer.py"
+    ],
+    "author": "kate_brennan",
+    "reviewers": [
+      "iris_nakamura",
+      "eve_thompson"
+    ],
+    "merged_at": "2024-12-02T10:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-123",
+    "title": "chore: update checkout-service dependencies to latest patch versions",
+    "service": "checkout-service",
+    "summary": "Routine dependency-update change for checkout-service. No functional behavior changes.",
+    "files_changed": [
+      "requirements.txt",
+      "package.json"
+    ],
+    "author": "carol_kim",
+    "reviewers": [
+      "henry_silva",
+      "alice_chen"
+    ],
+    "merged_at": "2024-12-05T15:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-124",
+    "title": "fix: handle timezone-aware datetimes in order-service serialization",
+    "service": "order-service",
+    "summary": "Routine bugfix change for order-service. No functional behavior changes.",
+    "files_changed": [
+      "src/serializers/datetime_serializer.py"
+    ],
+    "author": "bob_martinez",
+    "reviewers": [
+      "kate_brennan",
+      "eve_thompson"
+    ],
+    "merged_at": "2024-12-08T17:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-125",
+    "title": "test: add unit tests for inventory-service input validation layer",
+    "service": "inventory-service",
+    "summary": "Routine test change for inventory-service. No functional behavior changes.",
+    "files_changed": [
+      "tests/test_validation.py"
+    ],
+    "author": "iris_nakamura",
+    "reviewers": [
+      "iris_nakamura",
+      "alice_chen"
+    ],
+    "merged_at": "2024-12-10T11:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-126",
+    "title": "feat: add structured JSON logging to payment-service",
+    "service": "payment-service",
+    "summary": "Routine observability change for payment-service. No functional behavior changes.",
+    "files_changed": [
+      "src/logging/structured_logger.py",
+      "src/server.py"
+    ],
+    "author": "frank_nguyen",
+    "reviewers": [
+      "eve_thompson",
+      "dave_patel"
+    ],
+    "merged_at": "2024-12-13T10:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-127",
+    "title": "refactor: extract auth-service config loader into separate module",
+    "service": "auth-service",
+    "summary": "Routine refactor change for auth-service. No functional behavior changes.",
+    "files_changed": [
+      "src/config/loader.py",
+      "src/config/__init__.py"
+    ],
+    "author": "liam_foster",
+    "reviewers": [
+      "henry_silva",
+      "bob_martinez"
+    ],
+    "merged_at": "2024-12-14T10:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-128",
+    "title": "test: add unit tests for gateway-api input validation layer",
+    "service": "gateway-api",
+    "summary": "Routine test change for gateway-api. No functional behavior changes.",
+    "files_changed": [
+      "tests/test_validation.py"
+    ],
+    "author": "carol_kim",
+    "reviewers": [
+      "eve_thompson",
+      "iris_nakamura"
+    ],
+    "merged_at": "2024-12-16T17:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-129",
+    "title": "refactor: extract notification-service config loader into separate module",
+    "service": "notification-service",
+    "summary": "Routine refactor change for notification-service. No functional behavior changes.",
+    "files_changed": [
+      "src/config/loader.py",
+      "src/config/__init__.py"
+    ],
+    "author": "grace_okonkwo",
+    "reviewers": [
+      "kate_brennan",
+      "liam_foster"
+    ],
+    "merged_at": "2024-12-20T13:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-130",
+    "title": "feat: add structured JSON logging to gateway-api",
+    "service": "gateway-api",
+    "summary": "Routine observability change for gateway-api. No functional behavior changes.",
+    "files_changed": [
+      "src/logging/structured_logger.py",
+      "src/server.py"
+    ],
+    "author": "dave_patel",
+    "reviewers": [
+      "dave_patel",
+      "bob_martinez"
+    ],
+    "merged_at": "2024-12-23T10:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-131",
+    "title": "fix: correct typo in notification-service API documentation",
+    "service": "notification-service",
+    "summary": "Routine docs change for notification-service. No functional behavior changes.",
+    "files_changed": [
+      "docs/api_reference.md"
+    ],
+    "author": "alice_chen",
+    "reviewers": [
+      "bob_martinez",
+      "kate_brennan"
+    ],
+    "merged_at": "2024-12-26T12:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-132",
+    "title": "refactor: extract auth-service config loader into separate module",
+    "service": "auth-service",
+    "summary": "Routine refactor change for auth-service. No functional behavior changes.",
+    "files_changed": [
+      "src/config/loader.py",
+      "src/config/__init__.py"
+    ],
+    "author": "frank_nguyen",
+    "reviewers": [
+      "bob_martinez",
+      "iris_nakamura"
+    ],
+    "merged_at": "2024-12-27T09:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-133",
+    "title": "feat: add Prometheus metrics endpoint to gateway-api",
+    "service": "gateway-api",
+    "summary": "Routine observability change for gateway-api. No functional behavior changes.",
+    "files_changed": [
+      "src/metrics/prometheus.py",
+      "src/server.py"
+    ],
+    "author": "iris_nakamura",
+    "reviewers": [
+      "carol_kim",
+      "jake_wilson"
+    ],
+    "merged_at": "2024-12-29T12:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-134",
+    "title": "refactor: extract gateway-api config loader into separate module",
+    "service": "gateway-api",
+    "summary": "Routine refactor change for gateway-api. No functional behavior changes.",
+    "files_changed": [
+      "src/config/loader.py",
+      "src/config/__init__.py"
+    ],
+    "author": "dave_patel",
+    "reviewers": [
+      "bob_martinez",
+      "liam_foster"
+    ],
+    "merged_at": "2025-01-02T15:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-135",
+    "title": "fix: handle empty response body in user-service API client",
+    "service": "user-service",
+    "summary": "Routine bugfix change for user-service. No functional behavior changes.",
+    "files_changed": [
+      "src/clients/api_client.py",
+      "tests/test_api_client.py"
+    ],
+    "author": "henry_silva",
+    "reviewers": [
+      "liam_foster",
+      "alice_chen"
+    ],
+    "merged_at": "2025-01-06T15:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-136",
+    "title": "fix: correct typo in user-service API documentation",
+    "service": "user-service",
+    "summary": "Routine docs change for user-service. No functional behavior changes.",
+    "files_changed": [
+      "docs/api_reference.md"
+    ],
+    "author": "bob_martinez",
+    "reviewers": [
+      "dave_patel",
+      "liam_foster"
+    ],
+    "merged_at": "2025-01-07T14:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-137",
+    "title": "fix: handle timezone-aware datetimes in gateway-api serialization",
+    "service": "gateway-api",
+    "summary": "Routine bugfix change for gateway-api. No functional behavior changes.",
+    "files_changed": [
+      "src/serializers/datetime_serializer.py"
+    ],
+    "author": "grace_okonkwo",
+    "reviewers": [
+      "carol_kim",
+      "eve_thompson"
+    ],
+    "merged_at": "2025-01-09T11:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-138",
+    "title": "refactor: extract auth-service config loader into separate module",
+    "service": "auth-service",
+    "summary": "Routine refactor change for auth-service. No functional behavior changes.",
+    "files_changed": [
+      "src/config/loader.py",
+      "src/config/__init__.py"
+    ],
+    "author": "iris_nakamura",
+    "reviewers": [
+      "bob_martinez",
+      "alice_chen"
+    ],
+    "merged_at": "2025-01-13T16:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-139",
+    "title": "chore: update notification-service dependencies to latest patch versions",
+    "service": "notification-service",
+    "summary": "Routine dependency-update change for notification-service. No functional behavior changes.",
+    "files_changed": [
+      "requirements.txt",
+      "package.json"
+    ],
+    "author": "grace_okonkwo",
+    "reviewers": [
+      "henry_silva",
+      "liam_foster"
+    ],
+    "merged_at": "2025-01-14T11:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-140",
+    "title": "chore: upgrade Python base image from 3.11 to 3.12 in payment-service",
+    "service": "payment-service",
+    "summary": "Routine infra change for payment-service. No functional behavior changes.",
+    "files_changed": [
+      "Dockerfile",
+      ".github/workflows/ci.yml"
+    ],
+    "author": "grace_okonkwo",
+    "reviewers": [
+      "alice_chen",
+      "grace_okonkwo"
+    ],
+    "merged_at": "2025-01-16T11:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-141",
+    "title": "feat: add structured JSON logging to checkout-service",
+    "service": "checkout-service",
+    "summary": "Routine observability change for checkout-service. No functional behavior changes.",
+    "files_changed": [
+      "src/logging/structured_logger.py",
+      "src/server.py"
+    ],
+    "author": "liam_foster",
+    "reviewers": [
+      "liam_foster",
+      "iris_nakamura"
+    ],
+    "merged_at": "2025-01-19T15:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-142",
+    "title": "test: add unit tests for notification-service input validation layer",
+    "service": "notification-service",
+    "summary": "Routine test change for notification-service. No functional behavior changes.",
+    "files_changed": [
+      "tests/test_validation.py"
+    ],
+    "author": "dave_patel",
+    "reviewers": [
+      "alice_chen",
+      "jake_wilson"
+    ],
+    "merged_at": "2025-01-23T13:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-143",
+    "title": "fix: handle empty response body in payment-service API client",
+    "service": "payment-service",
+    "summary": "Routine bugfix change for payment-service. No functional behavior changes.",
+    "files_changed": [
+      "src/clients/api_client.py",
+      "tests/test_api_client.py"
+    ],
+    "author": "jake_wilson",
+    "reviewers": [
+      "henry_silva",
+      "iris_nakamura"
+    ],
+    "merged_at": "2025-01-24T09:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-144",
+    "title": "fix: correct typo in auth-service API documentation",
+    "service": "auth-service",
+    "summary": "Routine docs change for auth-service. No functional behavior changes.",
+    "files_changed": [
+      "docs/api_reference.md"
+    ],
+    "author": "bob_martinez",
+    "reviewers": [
+      "jake_wilson",
+      "bob_martinez"
+    ],
+    "merged_at": "2025-01-26T11:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-145",
+    "title": "chore: upgrade Python base image from 3.11 to 3.12 in auth-service",
+    "service": "auth-service",
+    "summary": "Routine infra change for auth-service. No functional behavior changes.",
+    "files_changed": [
+      "Dockerfile",
+      ".github/workflows/ci.yml"
+    ],
+    "author": "jake_wilson",
+    "reviewers": [
+      "jake_wilson",
+      "alice_chen"
+    ],
+    "merged_at": "2025-01-28T12:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-146",
+    "title": "chore: upgrade Python base image from 3.11 to 3.12 in inventory-service",
+    "service": "inventory-service",
+    "summary": "Routine infra change for inventory-service. No functional behavior changes.",
+    "files_changed": [
+      "Dockerfile",
+      ".github/workflows/ci.yml"
+    ],
+    "author": "dave_patel",
+    "reviewers": [
+      "kate_brennan",
+      "frank_nguyen"
+    ],
+    "merged_at": "2025-01-29T13:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-147",
+    "title": "feat: add Prometheus metrics endpoint to user-service",
+    "service": "user-service",
+    "summary": "Routine observability change for user-service. No functional behavior changes.",
+    "files_changed": [
+      "src/metrics/prometheus.py",
+      "src/server.py"
+    ],
+    "author": "kate_brennan",
+    "reviewers": [
+      "kate_brennan",
+      "eve_thompson"
+    ],
+    "merged_at": "2025-01-31T11:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-148",
+    "title": "fix: handle empty response body in auth-service API client",
+    "service": "auth-service",
+    "summary": "Routine bugfix change for auth-service. No functional behavior changes.",
+    "files_changed": [
+      "src/clients/api_client.py",
+      "tests/test_api_client.py"
+    ],
+    "author": "henry_silva",
+    "reviewers": [
+      "jake_wilson",
+      "liam_foster"
+    ],
+    "merged_at": "2025-02-04T09:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-149",
+    "title": "chore: update notification-service dependencies to latest patch versions",
+    "service": "notification-service",
+    "summary": "Routine dependency-update change for notification-service. No functional behavior changes.",
+    "files_changed": [
+      "requirements.txt",
+      "package.json"
+    ],
+    "author": "eve_thompson",
+    "reviewers": [
+      "carol_kim",
+      "frank_nguyen"
+    ],
+    "merged_at": "2025-02-05T17:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-150",
+    "title": "refactor: extract inventory-service config loader into separate module",
+    "service": "inventory-service",
+    "summary": "Routine refactor change for inventory-service. No functional behavior changes.",
+    "files_changed": [
+      "src/config/loader.py",
+      "src/config/__init__.py"
+    ],
+    "author": "carol_kim",
+    "reviewers": [
+      "henry_silva",
+      "iris_nakamura"
+    ],
+    "merged_at": "2025-02-06T13:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-151",
+    "title": "perf: add database index on payment-service most-queried columns",
+    "service": "payment-service",
+    "summary": "Routine performance change for payment-service. No functional behavior changes.",
+    "files_changed": [
+      "db/migrations/add_indexes.sql"
+    ],
+    "author": "eve_thompson",
+    "reviewers": [
+      "kate_brennan",
+      "bob_martinez"
+    ],
+    "merged_at": "2025-02-09T17:00:00Z",
+    "risk_level": "medium",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-152",
+    "title": "feat: add Prometheus metrics endpoint to auth-service",
+    "service": "auth-service",
+    "summary": "Routine observability change for auth-service. No functional behavior changes.",
+    "files_changed": [
+      "src/metrics/prometheus.py",
+      "src/server.py"
+    ],
+    "author": "liam_foster",
+    "reviewers": [
+      "iris_nakamura",
+      "carol_kim"
+    ],
+    "merged_at": "2025-02-11T10:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-153",
+    "title": "feat: add Prometheus metrics endpoint to notification-service",
+    "service": "notification-service",
+    "summary": "Routine observability change for notification-service. No functional behavior changes.",
+    "files_changed": [
+      "src/metrics/prometheus.py",
+      "src/server.py"
+    ],
+    "author": "dave_patel",
+    "reviewers": [
+      "kate_brennan",
+      "liam_foster"
+    ],
+    "merged_at": "2025-02-14T14:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  },
+  {
+    "pr_id": "PR-154",
+    "title": "fix: handle timezone-aware datetimes in gateway-api serialization",
+    "service": "gateway-api",
+    "summary": "Routine bugfix change for gateway-api. No functional behavior changes.",
+    "files_changed": [
+      "src/serializers/datetime_serializer.py"
+    ],
+    "author": "alice_chen",
+    "reviewers": [
+      "bob_martinez",
+      "kate_brennan"
+    ],
+    "merged_at": "2025-02-17T13:00:00Z",
+    "risk_level": "low",
+    "scenario_id": null
+  }
+]

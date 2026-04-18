@@ -1,0 +1,2147 @@
+[
+  {
+    "incident_id": "INC-1000",
+    "title": "checkout-service rate limiter throttling legitimate users \u2014 40% checkout failure rate",
+    "service": "checkout-service",
+    "severity": "SEV1",
+    "timestamp": "2024-09-02T23:02:00Z",
+    "resolved_at": "2024-09-02T23:22:00Z",
+    "duration_minutes": 20,
+    "symptoms": [
+      "HTTP 429 rate spiked from near-zero to 38% of all responses",
+      "Checkout funnel abandonment increased 4\u00d7 in real-time analytics",
+      "p99 latency on POST /checkout jumped from 320 ms to 5 200 ms",
+      "Support queue: 200+ tickets in 90 minutes about failed payments",
+      "order-service receiving 60% fewer order-created events than baseline"
+    ],
+    "root_cause": "The fixed-window counter was applied at the global service level rather than per user. All traffic shares a single counter that resets every 60 seconds. At 08:45 UTC normal morning traffic naturally exceeded 100 requests within the window, causing the counter to block ALL subsequent requests for the remainder of the minute, including legitimate checkouts.",
+    "resolution": "Rolled back rate_limiter.py to the previous sliding-window implementation. Temporarily set global limit to 10 000 req/min as blast radius control. Created follow-up ticket to implement true per-user Redis sorted-set rate limiting with a load test gate before merge.",
+    "services_affected": [
+      "checkout-service",
+      "payment-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-100"
+    ],
+    "oncall_engineer": "bob_martinez",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1000",
+    "scenario_id": "rate_limiter_misconfiguration"
+  },
+  {
+    "incident_id": "INC-1001",
+    "title": "order-service DB connection pool exhausted \u2014 orders failing at 88% error rate",
+    "service": "order-service",
+    "severity": "SEV1",
+    "timestamp": "2024-09-07T22:35:00Z",
+    "resolved_at": "2024-09-08T00:25:00Z",
+    "duration_minutes": 110,
+    "symptoms": [
+      "Error log: 'QueuePool limit overflow, max_overflow 0 current overflow 20'",
+      "Order creation success rate fell from 99.9% to 12% within 8 minutes of deploy",
+      "DB connection wait p99 jumped from 2 ms to 48 000 ms",
+      "inventory-service receiving 11\u00d7 its normal request volume",
+      "Kubernetes pod restarts on order-service every ~4 minutes (liveness probe)"
+    ],
+    "root_cause": "Each cart with N items now opens N concurrent DB connections in inventory-service (one per SELECT). An average cart has 8 items; peak traffic has 300 concurrent checkouts, yielding 2 400 simultaneous DB connections against a pool capped at 20. A missing connection.close() in the error path leaks connections that are never returned to the pool, accelerating exhaustion.",
+    "resolution": "Hotfix deployed: added finally: conn.close() in inventory_client.py. Batched all per-item lookups into a single SELECT ... WHERE id IN (...) query. Increased pool size to 50 as temporary buffer. Added Prometheus alert on pool utilization > 75%.",
+    "services_affected": [
+      "order-service",
+      "user-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-101"
+    ],
+    "oncall_engineer": "alice_chen",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1001",
+    "scenario_id": "connection_pool_exhaustion"
+  },
+  {
+    "incident_id": "INC-1002",
+    "title": "auth-service OOM-killed every 4\u20136 hours \u2014 memory growing unbounded",
+    "service": "auth-service",
+    "severity": "SEV2",
+    "timestamp": "2024-09-14T04:56:00Z",
+    "resolved_at": "2024-09-14T06:44:00Z",
+    "duration_minutes": 108,
+    "symptoms": [
+      "Kubernetes events: 'OOMKilled' on all 3 auth-service replicas in rotation",
+      "Memory usage grows linearly from 280 MB baseline to ~2.1 GB before kill",
+      "Intermittent 5xx errors during pod restart window (45\u201390 s)",
+      "Token validation p99 latency spikes from 2 ms to 400 ms ahead of each OOM",
+      "Heap dump shows LRUCache holding 50 000 entries at ~42 KB each"
+    ],
+    "root_cause": "The PR description mis-estimated cache memory at ~50 MB. Actual decoded JWT objects include full user claims, roles, and metadata averaging 42 KB each, not 1 KB. At 50 000 entries the cache consumes 2.1 GB. Additionally, the cache was bounded by count not by memory, and no TTL was set, so entries only evict after 50 001 distinct tokens are seen \u2014 meaning active sessions are never evicted.",
+    "resolution": "Added 5-minute TTL to all cache entries. Reduced max-entries to 10 000. Added memory-based eviction threshold at 150 MB via cachetools MemoryCache. Added Grafana panel for cache memory and eviction rate. Auth-service memory now stable at 310\u2013340 MB.",
+    "services_affected": [
+      "auth-service",
+      "gateway-api"
+    ],
+    "related_prs": [
+      "PR-102"
+    ],
+    "oncall_engineer": "carol_kim",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1002",
+    "scenario_id": "memory_leak_jwt_cache"
+  },
+  {
+    "incident_id": "INC-1003",
+    "title": "notification-service retry storm overloading SendGrid \u2014 cascading to payment receipts",
+    "service": "notification-service",
+    "severity": "SEV1",
+    "timestamp": "2024-09-19T09:09:00Z",
+    "resolved_at": "2024-09-19T10:24:00Z",
+    "duration_minutes": 75,
+    "symptoms": [
+      "SendGrid API returning 503 with message 'too many requests from single source'",
+      "notification-service thread pool at 100% \u2014 2 000 threads all in retry backoff",
+      "Retry queue depth growing at 45 000 messages/minute",
+      "payment-service: order confirmation emails not delivered for 55 minutes",
+      "auth-service: password reset emails silently dropped",
+      "CPU on notification-service sustained at 98% for 60 minutes"
+    ],
+    "root_cause": "SendGrid had a 20-minute partial outage. Without circuit breaking, all 2 000 worker threads continued attempting delivery. Exponential backoff state is in-memory per-thread and does not coordinate across threads, so the aggregate retry rate actually increased over time. By the time SendGrid recovered, our retry storm was generating 80 000 req/min against their API, triggering their global rate limiter and extending the incident by 35 minutes.",
+    "resolution": "Deployed emergency env-var-configured circuit breaker (open after 10 failures in 30 s). Drained retry queue via dead-letter queue replay with rate limiting. Coordinated with SendGrid support to whitelist our IPs temporarily. Added circuit breaker as required field in PR template for any external HTTP client.",
+    "services_affected": [
+      "notification-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-103"
+    ],
+    "oncall_engineer": "carol_kim",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1003",
+    "scenario_id": "circuit_breaker_removed"
+  },
+  {
+    "incident_id": "INC-1004",
+    "title": "checkout-service serving stale prices \u2014 40% flash sale discount not applied",
+    "service": "checkout-service",
+    "severity": "SEV2",
+    "timestamp": "2024-09-25T09:57:00Z",
+    "resolved_at": "2024-09-25T10:22:00Z",
+    "duration_minutes": 25,
+    "symptoms": [
+      "47 customer support tickets in 2 hours: 'discount not showing at checkout'",
+      "Revenue analytics: 14% below forecast for past 4 hours",
+      "Flash sale price of $29.99 showing as $49.99 at checkout",
+      "Prices on product listing page differ from cart total",
+      "New A/B test pricing cohort not receiving test prices"
+    ],
+    "root_cause": "The cache invalidation webhook began silently failing 6 days ago after a service account token was rotated as part of a security audit. The webhook endpoint returned 401 on every price update, but there was no alerting on 4xx responses from this webhook. With a 24 h TTL and broken invalidation, all price changes were invisible to checkout-service for up to 24 hours. The 09:00 flash sale prices never propagated.",
+    "resolution": "Rotated webhook service account token. Manually flushed all price cache entries via cache admin API. Reverted TTL to 5 minutes as interim measure. Added Datadog monitor on webhook endpoint HTTP response codes (alert on any 4xx/5xx). Added cache invalidation lag metric \u2014 alert if any SKU price not refreshed in >10 min.",
+    "services_affected": [
+      "checkout-service",
+      "payment-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-104"
+    ],
+    "oncall_engineer": "alice_chen",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1004",
+    "scenario_id": "stale_price_cache"
+  },
+  {
+    "incident_id": "INC-1005",
+    "title": "order-service DB CPU at 100% \u2014 N+1 query regression in order history",
+    "service": "order-service",
+    "severity": "SEV2",
+    "timestamp": "2024-10-03T16:49:00Z",
+    "resolved_at": "2024-10-03T18:20:00Z",
+    "duration_minutes": 91,
+    "symptoms": [
+      "Primary DB CPU jumped from 18% to 99% within 12 minutes of deploy",
+      "Slow query log: 80 000 individual SELECT on products table per minute",
+      "GET /orders/history p99 latency: 140 ms \u2192 9 200 ms",
+      "Read replica replication lag: 52 seconds behind primary",
+      "DB connection pool at 97% \u2014 downstream services starting to queue"
+    ],
+    "root_cause": "ProductService.get_by_id() is called once per order item in a Python for-loop, issuing one SELECT per call. A user with 20 orders \u00d7 6 items = 120 individual SELECTs per page load. At peak of 700 concurrent users loading order history: 84 000 queries/minute against a DB cluster tuned for 6 000 queries/minute. The test suite used a fixture with 1 order \u00d7 1 item, masking the N+1 completely.",
+    "resolution": "Hotfix: replaced loop with single SELECT ... WHERE id IN (all_item_ids) batch query. Deployed behind feature flag, validated 99.8% query reduction in staging. DB CPU back to 16% within 3 minutes of hotfix. Added query count assertion to integration test: assert mock_db.call_count == 1.",
+    "services_affected": [
+      "order-service",
+      "user-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-105"
+    ],
+    "oncall_engineer": "bob_martinez",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1005",
+    "scenario_id": "n_plus_one_query"
+  },
+  {
+    "incident_id": "INC-1006",
+    "title": "auth-service mTLS certificate expired \u2014 100% login failure",
+    "service": "auth-service",
+    "severity": "SEV1",
+    "timestamp": "2024-10-09T11:51:00Z",
+    "resolved_at": "2024-10-09T12:33:00Z",
+    "duration_minutes": 42,
+    "symptoms": [
+      "SSL handshake errors: 'certificate has expired or is not yet valid'",
+      "auth-service \u2192 user-service gRPC calls failing with UNAVAILABLE",
+      "All mobile/web login attempts returning 503",
+      "cert-manager logs: 'Not renewing, renewBefore window not reached'",
+      "Oncall paged: auth-service availability dropped to 0% for 8 minutes"
+    ],
+    "root_cause": "When the PR changed renewBefore from 30 days to 7 days, cert-manager re-evaluated all managed certificates. The existing cert had 23 days remaining \u2014 within the old 30-day window but outside the new 7-day window. cert-manager determined 'no renewal needed' since 23 > 7. The cert was never renewed. 23 days later it expired with no automated action triggered and no monitoring alert because cert-expiry alerting only fires at <7 days.",
+    "resolution": "Manually triggered cert rotation: kubectl annotate cert auth-service-tls cert-manager.io/issueAsCertificateRequest=true. Services recovered in 4 minutes after cert propagation. Added cert expiry alert at 14 days AND 7 days. Added CI check: cert expiry must be >30 days after any cert-manager config change.",
+    "services_affected": [
+      "auth-service",
+      "gateway-api",
+      "user-service"
+    ],
+    "related_prs": [
+      "PR-106"
+    ],
+    "oncall_engineer": "carol_kim",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1006",
+    "scenario_id": "tls_cert_expiry"
+  },
+  {
+    "incident_id": "INC-1007",
+    "title": "payment-service Stripe webhook validation broken \u2014 orders stuck in payment_pending",
+    "service": "payment-service",
+    "severity": "SEV1",
+    "timestamp": "2024-10-15T19:51:00Z",
+    "resolved_at": "2024-10-15T21:36:00Z",
+    "duration_minutes": 105,
+    "symptoms": [
+      "Stripe dashboard: webhook delivery failure rate 100%, all returning HTTP 400",
+      "Order status stuck in 'payment_pending' for all orders since 14:32 UTC",
+      "Customers charged on Stripe but receiving no order confirmation",
+      "payment-service logs: 'SignatureVerificationError: No signatures found'",
+      "Support: 300+ tickets 'I was charged but my order disappeared'"
+    ],
+    "root_cause": "Stripe SDK v3.0.0 changed Webhook.construct_event() to require raw request bytes for HMAC verification. webhook_handler.py called request.json() (which parses then re-serializes the body) before passing to construct_event(). Re-serialization changes key ordering and whitespace, invalidating the HMAC. The 30-minute canary soak did not catch this because no Stripe webhooks were delivered to the canary instance during that window.",
+    "resolution": "Fix: changed request.json() to request.get_data(as_text=False) in webhook_handler.py. Replayed all failed webhook events from Stripe dashboard (Events API, last 6 hours). Manually reconciled 847 orders stuck in payment_pending. Added integration test using real raw bytes from Stripe test fixture, not reconstructed JSON.",
+    "services_affected": [
+      "payment-service",
+      "checkout-service",
+      "order-service",
+      "notification-service"
+    ],
+    "related_prs": [
+      "PR-107"
+    ],
+    "oncall_engineer": "alice_chen",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1007",
+    "scenario_id": "sdk_major_version_upgrade"
+  },
+  {
+    "incident_id": "INC-1008",
+    "title": "gateway-api global 30-second timeout regression \u2014 thread pool saturating",
+    "service": "gateway-api",
+    "severity": "SEV2",
+    "timestamp": "2024-10-18T12:55:00Z",
+    "resolved_at": "2024-10-18T13:19:00Z",
+    "duration_minutes": 24,
+    "symptoms": [
+      "All endpoint p99 latencies jumped to exactly 30 000 ms",
+      "Requests that previously failed fast at 3 s now hold threads for 30 s",
+      "DB connection pool exhausted as long-running queries held connections open",
+      "Kubernetes: gateway-api HPA scaling to max replicas (50) but not recovering",
+      "Error budget: 9% of monthly SLO budget consumed in 50 minutes"
+    ],
+    "root_cause": "The NGINX config change placed proxy_read_timeout 30s in the http {} block instead of inside the location /api/v2/recommendations {} block. This set the global read timeout for ALL upstream connections to 30 s. Slow upstream responses that would have been killed at 3 s now hold goroutine/thread resources for 30 s, cascading into resource exhaustion under normal traffic.",
+    "resolution": "Rolled back nginx.conf to previous configmap version via kubectl rollout undo. Traffic recovered in 90 seconds. Applied corrected config with timeout scoped inside the specific location block. Added required nginx-config-review step to gateway PR template. Mandatory staging soak of 15 min for any gateway change.",
+    "services_affected": [
+      "gateway-api",
+      "auth-service",
+      "user-service"
+    ],
+    "related_prs": [
+      "PR-108"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1008",
+    "scenario_id": "nginx_timeout_config_drift"
+  },
+  {
+    "incident_id": "INC-1009",
+    "title": "payment-service DB deadlocks spiking \u2014 23% payment failure rate",
+    "service": "payment-service",
+    "severity": "SEV1",
+    "timestamp": "2024-10-23T11:19:00Z",
+    "resolved_at": "2024-10-23T12:08:00Z",
+    "duration_minutes": 49,
+    "symptoms": [
+      "MySQL: 'Deadlock found when trying to get lock; try restarting transaction'",
+      "POST /payments error rate: 0.1% \u2192 23% within 6 minutes of deploy",
+      "p99 payment latency: 45 ms \u2192 14 000 ms",
+      "Retry storms from iOS/Android clients amplifying deadlock contention",
+      "Slow query log: SELECT FOR UPDATE on idempotency_keys holding locks >8 s"
+    ],
+    "root_cause": "The idempotency lock (SELECT FOR UPDATE on idempotency_keys) is held while waiting for Stripe's response, which takes 2\u20138 s. A mobile client that retries after a network timeout creates a second request with the same idempotency key. Both requests acquire overlapping row locks \u2014 one on idempotency_keys, one on payment_transactions \u2014 in opposite order, creating a classic AB/BA deadlock. Mobile retry logic amplifies this: each deadlock triggers 3 retries, worsening contention exponentially under load.",
+    "resolution": "Replaced SELECT FOR UPDATE with INSERT ... ON DUPLICATE KEY UPDATE (optimistic lock). Moved Stripe API call outside the transaction boundary. Added innodb_lock_wait_timeout=2. Added client-side retry jitter (100\u2013500 ms random backoff) in mobile SDK. Payment failure rate returned to 0.08% within 5 minutes of hotfix.",
+    "services_affected": [
+      "payment-service",
+      "checkout-service"
+    ],
+    "related_prs": [
+      "PR-109"
+    ],
+    "oncall_engineer": "bob_martinez",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1009",
+    "scenario_id": "idempotency_deadlock"
+  },
+  {
+    "incident_id": "INC-1010",
+    "title": "user-service pagination returning duplicate records",
+    "service": "user-service",
+    "severity": "SEV3",
+    "timestamp": "2024-12-03T10:17:00Z",
+    "resolved_at": "2024-12-03T10:40:00Z",
+    "duration_minutes": 23,
+    "symptoms": [
+      "GET /users?page=N returning overlapping records with page N-1",
+      "Frontend infinite scroll showing duplicate user entries",
+      "Data inconsistency reported by QA in staging canary"
+    ],
+    "root_cause": "ORDER BY clause missing on paginated query; cursor-based pagination requires stable sort order.",
+    "resolution": "Added ORDER BY created_at, id to paginated query. Deployed hotfix. No data loss.",
+    "services_affected": [
+      "user-service",
+      "checkout-service",
+      "auth-service"
+    ],
+    "related_prs": [
+      "PR-135"
+    ],
+    "oncall_engineer": "alice_chen",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1010",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1011",
+    "title": "inventory-service bulk import timing out for large catalogs",
+    "service": "inventory-service",
+    "severity": "SEV3",
+    "timestamp": "2024-12-04T05:37:00Z",
+    "resolved_at": "2024-12-04T06:25:00Z",
+    "duration_minutes": 48,
+    "symptoms": [
+      "POST /inventory/bulk-import timing out after 30 seconds for catalogs >5000 SKUs",
+      "Partial imports leaving inventory in inconsistent state",
+      "Merchants reporting missing SKUs after import"
+    ],
+    "root_cause": "Bulk import wrapped in single DB transaction. 5000 individual INSERTs in one transaction held table locks for 30+ seconds, triggering gateway timeout.",
+    "resolution": "Batched INSERTs into chunks of 500 within separate transactions. Import now runs in ~4 seconds for 5000 SKUs.",
+    "services_affected": [
+      "inventory-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-113"
+    ],
+    "oncall_engineer": "carol_kim",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1011",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1012",
+    "title": "notification-service sending duplicate push notifications",
+    "service": "notification-service",
+    "severity": "SEV2",
+    "timestamp": "2024-12-09T19:32:00Z",
+    "resolved_at": "2024-12-09T20:01:00Z",
+    "duration_minutes": 29,
+    "symptoms": [
+      "Users receiving 3\u20135 identical push notifications per order event",
+      "Push notification provider billing anomaly: 4\u00d7 expected volume",
+      "App store reviews mentioning notification spam"
+    ],
+    "root_cause": "Kafka consumer group rebalance during deploy caused messages to be re-processed without idempotency check. Each partition reassignment replayed last 1000 messages.",
+    "resolution": "Added deduplication check on event_id before sending push notification. Kafka consumer configured with explicit partition assignment during deploys.",
+    "services_affected": [
+      "notification-service",
+      "payment-service"
+    ],
+    "related_prs": [
+      "PR-149"
+    ],
+    "oncall_engineer": "alice_chen",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1012",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1013",
+    "title": "auth-service returning 500 for users with unicode characters in display name",
+    "service": "auth-service",
+    "severity": "SEV3",
+    "timestamp": "2024-12-11T16:59:00Z",
+    "resolved_at": "2024-12-11T18:22:00Z",
+    "duration_minutes": 83,
+    "symptoms": [
+      "Users with emoji or CJK characters in display name getting 500 on profile update",
+      "auth-service logs: UnicodeEncodeError: 'latin-1' codec can't encode character",
+      "Affects approximately 3% of user base"
+    ],
+    "root_cause": "New audit logging module used Python's logging with latin-1 encoding for file handler. Any user with non-latin character in their name caused logging to crash mid-request.",
+    "resolution": "Updated FileHandler to use UTF-8 encoding. Audit logs now handle full Unicode range.",
+    "services_affected": [
+      "auth-service",
+      "user-service",
+      "gateway-api"
+    ],
+    "related_prs": [
+      "PR-138"
+    ],
+    "oncall_engineer": "carol_kim",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1013",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1014",
+    "title": "payment-service refund endpoint returning 200 but not processing refund",
+    "service": "payment-service",
+    "severity": "SEV2",
+    "timestamp": "2024-12-19T21:54:00Z",
+    "resolved_at": "2024-12-19T22:24:00Z",
+    "duration_minutes": 30,
+    "symptoms": [
+      "POST /payments/{id}/refund returns HTTP 200 but refund_status stays as 'pending'",
+      "Stripe dashboard shows no refund initiated",
+      "Customer service: 80 tickets about refunds not appearing"
+    ],
+    "root_cause": "Exception in Stripe API call was silently caught and swallowed by a bare except: pass block introduced in error handling refactor. Endpoint returned 200 even on failure.",
+    "resolution": "Removed bare except: pass. Added proper exception handling with logging and 500 response. Manually initiated 80 pending refunds via Stripe dashboard.",
+    "services_affected": [
+      "payment-service",
+      "notification-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-143"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1014",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1015",
+    "title": "checkout-service applying wrong discount tier for bulk orders",
+    "service": "checkout-service",
+    "severity": "SEV2",
+    "timestamp": "2024-12-24T22:18:00Z",
+    "resolved_at": "2024-12-24T23:43:00Z",
+    "duration_minutes": 85,
+    "symptoms": [
+      "B2B customers reporting incorrect discount tiers applied at checkout",
+      "Orders with qty > 100 items receiving 5% discount instead of contracted 20%",
+      "Finance flagging margin anomaly on B2B segment"
+    ],
+    "root_cause": "Off-by-one error in discount tier boundary check. Condition was cart.quantity > 100 but should be cart.quantity >= 100. Exactly 100-item orders fell into wrong tier.",
+    "resolution": "Fixed boundary condition to >=. Issued credit notes for affected orders in past 30 days.",
+    "services_affected": [
+      "checkout-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-118"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1015",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1016",
+    "title": "order-service search returning results from wrong tenant in multi-tenant environment",
+    "service": "order-service",
+    "severity": "SEV1",
+    "timestamp": "2024-12-28T18:19:00Z",
+    "resolved_at": "2024-12-28T19:25:00Z",
+    "duration_minutes": 66,
+    "symptoms": [
+      "Merchant A seeing order data from Merchant B in search results",
+      "tenant_id filter missing from Elasticsearch query",
+      "Potential data privacy compliance issue \u2014 legal notified"
+    ],
+    "root_cause": "New Elasticsearch query builder did not include tenant_id filter clause. Single-tenant Elasticsearch index had tenant isolation enforced at query level, not index level.",
+    "resolution": "Hotfix added mandatory tenant_id term filter to all search queries. Full audit of all ES queries conducted. No evidence of bulk data exfiltration.",
+    "services_affected": [
+      "order-service",
+      "notification-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-114"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1016",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1017",
+    "title": "gateway-api CORS preflight failing for new mobile API version",
+    "service": "gateway-api",
+    "severity": "SEV3",
+    "timestamp": "2025-01-03T20:20:00Z",
+    "resolved_at": "2025-01-03T21:34:00Z",
+    "duration_minutes": 74,
+    "symptoms": [
+      "Mobile app v4.2 users unable to reach any API endpoints on iOS",
+      "Browser console: 'CORS policy: No Access-Control-Allow-Origin header'",
+      "Affects only requests from app version sending X-App-Version: 4.2"
+    ],
+    "root_cause": "New gateway CORS policy whitelisted specific Origin headers. Mobile app v4.2 sends a new custom header X-App-Version not in the allowed headers list, causing preflight to fail.",
+    "resolution": "Added X-App-Version to Access-Control-Allow-Headers in gateway CORS config. Mobile traffic restored immediately.",
+    "services_affected": [
+      "gateway-api",
+      "inventory-service",
+      "auth-service"
+    ],
+    "related_prs": [
+      "PR-134"
+    ],
+    "oncall_engineer": "eve_thompson",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1017",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1018",
+    "title": "user-service password reset tokens expiring prematurely",
+    "service": "user-service",
+    "severity": "SEV3",
+    "timestamp": "2025-01-09T05:42:00Z",
+    "resolved_at": "2025-01-09T06:07:00Z",
+    "duration_minutes": 25,
+    "symptoms": [
+      "Users clicking password reset links within 5 minutes receiving 'token expired'",
+      "Token TTL shows as 0 seconds in Redis",
+      "Support volume up 3\u00d7 for password reset issues"
+    ],
+    "root_cause": "Token expiry calculation used datetime.utcnow() but Redis TTL was set using local server time (UTC+5:30). Net result: tokens expired 5.5 hours before they should, sometimes immediately.",
+    "resolution": "Standardized all timestamp generation to UTC. Used int(time.time()) for Redis TTL calculation. All servers confirmed to run in UTC timezone.",
+    "services_affected": [
+      "user-service",
+      "auth-service",
+      "checkout-service"
+    ],
+    "related_prs": [
+      "PR-135"
+    ],
+    "oncall_engineer": "carol_kim",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1018",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1019",
+    "title": "inventory-service stock count going negative due to race condition",
+    "service": "inventory-service",
+    "severity": "SEV2",
+    "timestamp": "2025-01-08T04:01:00Z",
+    "resolved_at": "2025-01-08T04:21:00Z",
+    "duration_minutes": 20,
+    "symptoms": [
+      "inventory.stock_count reaching -47 for high-demand SKU",
+      "Overselling: 47 orders for an item with 0 remaining stock",
+      "Warehouse team unable to fulfill 47 orders"
+    ],
+    "root_cause": "Stock decrement used read-then-write pattern without atomic operation: read stock, check > 0, subtract 1, write back. Under concurrent checkouts, multiple threads read stock > 0 simultaneously and all decrement, yielding negative values.",
+    "resolution": "Replaced read-then-write with UPDATE inventory SET stock = stock - 1 WHERE id = ? AND stock > 0. Affected orders manually cancelled with customer notification.",
+    "services_affected": [
+      "inventory-service",
+      "checkout-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-117"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1019",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1020",
+    "title": "notification-service retry storm overloading SendGrid \u2014 cascading to payment receipts",
+    "service": "notification-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-13T22:00:00Z",
+    "resolved_at": "2024-09-19T10:24:00Z",
+    "duration_minutes": 75,
+    "symptoms": [
+      "SendGrid API returning 503 with message 'too many requests from single source'",
+      "notification-service thread pool at 100% \u2014 2 000 threads all in retry backoff",
+      "Retry queue depth growing at 45 000 messages/minute",
+      "payment-service: order confirmation emails not delivered for 55 minutes",
+      "auth-service: password reset emails silently dropped",
+      "CPU on notification-service sustained at 98% for 60 minutes"
+    ],
+    "root_cause": "SendGrid had a 20-minute partial outage. Without circuit breaking, all 2 000 worker threads continued attempting delivery. Exponential backoff state is in-memory per-thread and does not coordinate across threads, so the aggregate retry rate actually increased over time. By the time SendGrid recovered, our retry storm was generating 80 000 req/min against their API, triggering their global rate limiter and extending the incident by 35 minutes.",
+    "resolution": "Deployed emergency env-var-configured circuit breaker (open after 10 failures in 30 s). Drained retry queue via dead-letter queue replay with rate limiting. Coordinated with SendGrid support to whitelist our IPs temporarily. Added circuit breaker as required field in PR template for any external HTTP client.",
+    "services_affected": [
+      "notification-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-103"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1003",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1021",
+    "title": "payment-service Stripe webhook validation broken \u2014 orders stuck in payment_pending",
+    "service": "payment-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-24T07:00:00Z",
+    "resolved_at": "2024-10-15T21:36:00Z",
+    "duration_minutes": 105,
+    "symptoms": [
+      "Stripe dashboard: webhook delivery failure rate 100%, all returning HTTP 400",
+      "Order status stuck in 'payment_pending' for all orders since 14:32 UTC",
+      "Customers charged on Stripe but receiving no order confirmation",
+      "payment-service logs: 'SignatureVerificationError: No signatures found'",
+      "Support: 300+ tickets 'I was charged but my order disappeared'"
+    ],
+    "root_cause": "Stripe SDK v3.0.0 changed Webhook.construct_event() to require raw request bytes for HMAC verification. webhook_handler.py called request.json() (which parses then re-serializes the body) before passing to construct_event(). Re-serialization changes key ordering and whitespace, invalidating the HMAC. The 30-minute canary soak did not catch this because no Stripe webhooks were delivered to the canary instance during that window.",
+    "resolution": "Fix: changed request.json() to request.get_data(as_text=False) in webhook_handler.py. Replayed all failed webhook events from Stripe dashboard (Events API, last 6 hours). Manually reconciled 847 orders stuck in payment_pending. Added integration test using real raw bytes from Stripe test fixture, not reconstructed JSON.",
+    "services_affected": [
+      "payment-service",
+      "checkout-service",
+      "order-service",
+      "notification-service"
+    ],
+    "related_prs": [
+      "PR-107"
+    ],
+    "oncall_engineer": "bob_martinez",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1007",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1022",
+    "title": "checkout-service rate limiter throttling legitimate users \u2014 40% checkout failure rate",
+    "service": "checkout-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-25T03:00:00Z",
+    "resolved_at": "2024-09-02T23:22:00Z",
+    "duration_minutes": 20,
+    "symptoms": [
+      "HTTP 429 rate spiked from near-zero to 38% of all responses",
+      "Checkout funnel abandonment increased 4\u00d7 in real-time analytics",
+      "p99 latency on POST /checkout jumped from 320 ms to 5 200 ms",
+      "Support queue: 200+ tickets in 90 minutes about failed payments",
+      "order-service receiving 60% fewer order-created events than baseline"
+    ],
+    "root_cause": "The fixed-window counter was applied at the global service level rather than per user. All traffic shares a single counter that resets every 60 seconds. At 08:45 UTC normal morning traffic naturally exceeded 100 requests within the window, causing the counter to block ALL subsequent requests for the remainder of the minute, including legitimate checkouts.",
+    "resolution": "Rolled back rate_limiter.py to the previous sliding-window implementation. Temporarily set global limit to 10 000 req/min as blast radius control. Created follow-up ticket to implement true per-user Redis sorted-set rate limiting with a load test gate before merge.",
+    "services_affected": [
+      "checkout-service",
+      "payment-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-100"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1000",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1023",
+    "title": "notification-service retry storm overloading SendGrid \u2014 cascading to payment receipts",
+    "service": "notification-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-10T22:00:00Z",
+    "resolved_at": "2024-09-19T10:24:00Z",
+    "duration_minutes": 75,
+    "symptoms": [
+      "SendGrid API returning 503 with message 'too many requests from single source'",
+      "notification-service thread pool at 100% \u2014 2 000 threads all in retry backoff",
+      "Retry queue depth growing at 45 000 messages/minute",
+      "payment-service: order confirmation emails not delivered for 55 minutes",
+      "auth-service: password reset emails silently dropped",
+      "CPU on notification-service sustained at 98% for 60 minutes"
+    ],
+    "root_cause": "SendGrid had a 20-minute partial outage. Without circuit breaking, all 2 000 worker threads continued attempting delivery. Exponential backoff state is in-memory per-thread and does not coordinate across threads, so the aggregate retry rate actually increased over time. By the time SendGrid recovered, our retry storm was generating 80 000 req/min against their API, triggering their global rate limiter and extending the incident by 35 minutes.",
+    "resolution": "Deployed emergency env-var-configured circuit breaker (open after 10 failures in 30 s). Drained retry queue via dead-letter queue replay with rate limiting. Coordinated with SendGrid support to whitelist our IPs temporarily. Added circuit breaker as required field in PR template for any external HTTP client.",
+    "services_affected": [
+      "notification-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-103"
+    ],
+    "oncall_engineer": "eve_thompson",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1003",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1024",
+    "title": "payment-service Stripe webhook validation broken \u2014 orders stuck in payment_pending",
+    "service": "payment-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-02T17:00:00Z",
+    "resolved_at": "2024-10-15T21:36:00Z",
+    "duration_minutes": 105,
+    "symptoms": [
+      "Stripe dashboard: webhook delivery failure rate 100%, all returning HTTP 400",
+      "Order status stuck in 'payment_pending' for all orders since 14:32 UTC",
+      "Customers charged on Stripe but receiving no order confirmation",
+      "payment-service logs: 'SignatureVerificationError: No signatures found'",
+      "Support: 300+ tickets 'I was charged but my order disappeared'"
+    ],
+    "root_cause": "Stripe SDK v3.0.0 changed Webhook.construct_event() to require raw request bytes for HMAC verification. webhook_handler.py called request.json() (which parses then re-serializes the body) before passing to construct_event(). Re-serialization changes key ordering and whitespace, invalidating the HMAC. The 30-minute canary soak did not catch this because no Stripe webhooks were delivered to the canary instance during that window.",
+    "resolution": "Fix: changed request.json() to request.get_data(as_text=False) in webhook_handler.py. Replayed all failed webhook events from Stripe dashboard (Events API, last 6 hours). Manually reconciled 847 orders stuck in payment_pending. Added integration test using real raw bytes from Stripe test fixture, not reconstructed JSON.",
+    "services_affected": [
+      "payment-service",
+      "checkout-service",
+      "order-service",
+      "notification-service"
+    ],
+    "related_prs": [
+      "PR-107"
+    ],
+    "oncall_engineer": "bob_martinez",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1007",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1025",
+    "title": "order-service DB connection pool exhausted \u2014 orders failing at 88% error rate",
+    "service": "order-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-28T04:00:00Z",
+    "resolved_at": "2024-09-08T00:25:00Z",
+    "duration_minutes": 110,
+    "symptoms": [
+      "Error log: 'QueuePool limit overflow, max_overflow 0 current overflow 20'",
+      "Order creation success rate fell from 99.9% to 12% within 8 minutes of deploy",
+      "DB connection wait p99 jumped from 2 ms to 48 000 ms",
+      "inventory-service receiving 11\u00d7 its normal request volume",
+      "Kubernetes pod restarts on order-service every ~4 minutes (liveness probe)"
+    ],
+    "root_cause": "Each cart with N items now opens N concurrent DB connections in inventory-service (one per SELECT). An average cart has 8 items; peak traffic has 300 concurrent checkouts, yielding 2 400 simultaneous DB connections against a pool capped at 20. A missing connection.close() in the error path leaks connections that are never returned to the pool, accelerating exhaustion.",
+    "resolution": "Hotfix deployed: added finally: conn.close() in inventory_client.py. Batched all per-item lookups into a single SELECT ... WHERE id IN (...) query. Increased pool size to 50 as temporary buffer. Added Prometheus alert on pool utilization > 75%.",
+    "services_affected": [
+      "order-service",
+      "user-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-101"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1001",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1026",
+    "title": "gateway-api global 30-second timeout regression \u2014 thread pool saturating",
+    "service": "gateway-api",
+    "severity": "SEV2",
+    "timestamp": "2025-02-03T19:00:00Z",
+    "resolved_at": "2024-10-18T13:19:00Z",
+    "duration_minutes": 24,
+    "symptoms": [
+      "All endpoint p99 latencies jumped to exactly 30 000 ms",
+      "Requests that previously failed fast at 3 s now hold threads for 30 s",
+      "DB connection pool exhausted as long-running queries held connections open",
+      "Kubernetes: gateway-api HPA scaling to max replicas (50) but not recovering",
+      "Error budget: 9% of monthly SLO budget consumed in 50 minutes"
+    ],
+    "root_cause": "The NGINX config change placed proxy_read_timeout 30s in the http {} block instead of inside the location /api/v2/recommendations {} block. This set the global read timeout for ALL upstream connections to 30 s. Slow upstream responses that would have been killed at 3 s now hold goroutine/thread resources for 30 s, cascading into resource exhaustion under normal traffic.",
+    "resolution": "Rolled back nginx.conf to previous configmap version via kubectl rollout undo. Traffic recovered in 90 seconds. Applied corrected config with timeout scoped inside the specific location block. Added required nginx-config-review step to gateway PR template. Mandatory staging soak of 15 min for any gateway change.",
+    "services_affected": [
+      "gateway-api",
+      "auth-service",
+      "user-service"
+    ],
+    "related_prs": [
+      "PR-108"
+    ],
+    "oncall_engineer": "carol_kim",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1008",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1027",
+    "title": "payment-service Stripe webhook validation broken \u2014 orders stuck in payment_pending",
+    "service": "payment-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-07T23:00:00Z",
+    "resolved_at": "2024-10-15T21:36:00Z",
+    "duration_minutes": 105,
+    "symptoms": [
+      "Stripe dashboard: webhook delivery failure rate 100%, all returning HTTP 400",
+      "Order status stuck in 'payment_pending' for all orders since 14:32 UTC",
+      "Customers charged on Stripe but receiving no order confirmation",
+      "payment-service logs: 'SignatureVerificationError: No signatures found'",
+      "Support: 300+ tickets 'I was charged but my order disappeared'"
+    ],
+    "root_cause": "Stripe SDK v3.0.0 changed Webhook.construct_event() to require raw request bytes for HMAC verification. webhook_handler.py called request.json() (which parses then re-serializes the body) before passing to construct_event(). Re-serialization changes key ordering and whitespace, invalidating the HMAC. The 30-minute canary soak did not catch this because no Stripe webhooks were delivered to the canary instance during that window.",
+    "resolution": "Fix: changed request.json() to request.get_data(as_text=False) in webhook_handler.py. Replayed all failed webhook events from Stripe dashboard (Events API, last 6 hours). Manually reconciled 847 orders stuck in payment_pending. Added integration test using real raw bytes from Stripe test fixture, not reconstructed JSON.",
+    "services_affected": [
+      "payment-service",
+      "checkout-service",
+      "order-service",
+      "notification-service"
+    ],
+    "related_prs": [
+      "PR-107"
+    ],
+    "oncall_engineer": "eve_thompson",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1007",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1028",
+    "title": "auth-service mTLS certificate expired \u2014 100% login failure",
+    "service": "auth-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-21T17:00:00Z",
+    "resolved_at": "2024-10-09T12:33:00Z",
+    "duration_minutes": 42,
+    "symptoms": [
+      "SSL handshake errors: 'certificate has expired or is not yet valid'",
+      "auth-service \u2192 user-service gRPC calls failing with UNAVAILABLE",
+      "All mobile/web login attempts returning 503",
+      "cert-manager logs: 'Not renewing, renewBefore window not reached'",
+      "Oncall paged: auth-service availability dropped to 0% for 8 minutes"
+    ],
+    "root_cause": "When the PR changed renewBefore from 30 days to 7 days, cert-manager re-evaluated all managed certificates. The existing cert had 23 days remaining \u2014 within the old 30-day window but outside the new 7-day window. cert-manager determined 'no renewal needed' since 23 > 7. The cert was never renewed. 23 days later it expired with no automated action triggered and no monitoring alert because cert-expiry alerting only fires at <7 days.",
+    "resolution": "Manually triggered cert rotation: kubectl annotate cert auth-service-tls cert-manager.io/issueAsCertificateRequest=true. Services recovered in 4 minutes after cert propagation. Added cert expiry alert at 14 days AND 7 days. Added CI check: cert expiry must be >30 days after any cert-manager config change.",
+    "services_affected": [
+      "auth-service",
+      "gateway-api",
+      "user-service"
+    ],
+    "related_prs": [
+      "PR-106"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1006",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1029",
+    "title": "auth-service OOM-killed every 4\u20136 hours \u2014 memory growing unbounded",
+    "service": "auth-service",
+    "severity": "SEV2",
+    "timestamp": "2025-02-15T15:00:00Z",
+    "resolved_at": "2024-09-14T06:44:00Z",
+    "duration_minutes": 108,
+    "symptoms": [
+      "Kubernetes events: 'OOMKilled' on all 3 auth-service replicas in rotation",
+      "Memory usage grows linearly from 280 MB baseline to ~2.1 GB before kill",
+      "Intermittent 5xx errors during pod restart window (45\u201390 s)",
+      "Token validation p99 latency spikes from 2 ms to 400 ms ahead of each OOM",
+      "Heap dump shows LRUCache holding 50 000 entries at ~42 KB each"
+    ],
+    "root_cause": "The PR description mis-estimated cache memory at ~50 MB. Actual decoded JWT objects include full user claims, roles, and metadata averaging 42 KB each, not 1 KB. At 50 000 entries the cache consumes 2.1 GB. Additionally, the cache was bounded by count not by memory, and no TTL was set, so entries only evict after 50 001 distinct tokens are seen \u2014 meaning active sessions are never evicted.",
+    "resolution": "Added 5-minute TTL to all cache entries. Reduced max-entries to 10 000. Added memory-based eviction threshold at 150 MB via cachetools MemoryCache. Added Grafana panel for cache memory and eviction rate. Auth-service memory now stable at 310\u2013340 MB.",
+    "services_affected": [
+      "auth-service",
+      "gateway-api"
+    ],
+    "related_prs": [
+      "PR-102"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1002",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1030",
+    "title": "checkout-service serving stale prices \u2014 40% flash sale discount not applied",
+    "service": "checkout-service",
+    "severity": "SEV2",
+    "timestamp": "2025-02-16T07:00:00Z",
+    "resolved_at": "2024-09-25T10:22:00Z",
+    "duration_minutes": 25,
+    "symptoms": [
+      "47 customer support tickets in 2 hours: 'discount not showing at checkout'",
+      "Revenue analytics: 14% below forecast for past 4 hours",
+      "Flash sale price of $29.99 showing as $49.99 at checkout",
+      "Prices on product listing page differ from cart total",
+      "New A/B test pricing cohort not receiving test prices"
+    ],
+    "root_cause": "The cache invalidation webhook began silently failing 6 days ago after a service account token was rotated as part of a security audit. The webhook endpoint returned 401 on every price update, but there was no alerting on 4xx responses from this webhook. With a 24 h TTL and broken invalidation, all price changes were invisible to checkout-service for up to 24 hours. The 09:00 flash sale prices never propagated.",
+    "resolution": "Rotated webhook service account token. Manually flushed all price cache entries via cache admin API. Reverted TTL to 5 minutes as interim measure. Added Datadog monitor on webhook endpoint HTTP response codes (alert on any 4xx/5xx). Added cache invalidation lag metric \u2014 alert if any SKU price not refreshed in >10 min.",
+    "services_affected": [
+      "checkout-service",
+      "payment-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-104"
+    ],
+    "oncall_engineer": "carol_kim",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1004",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1031",
+    "title": "gateway-api global 30-second timeout regression \u2014 thread pool saturating",
+    "service": "gateway-api",
+    "severity": "SEV2",
+    "timestamp": "2025-01-30T20:00:00Z",
+    "resolved_at": "2024-10-18T13:19:00Z",
+    "duration_minutes": 24,
+    "symptoms": [
+      "All endpoint p99 latencies jumped to exactly 30 000 ms",
+      "Requests that previously failed fast at 3 s now hold threads for 30 s",
+      "DB connection pool exhausted as long-running queries held connections open",
+      "Kubernetes: gateway-api HPA scaling to max replicas (50) but not recovering",
+      "Error budget: 9% of monthly SLO budget consumed in 50 minutes"
+    ],
+    "root_cause": "The NGINX config change placed proxy_read_timeout 30s in the http {} block instead of inside the location /api/v2/recommendations {} block. This set the global read timeout for ALL upstream connections to 30 s. Slow upstream responses that would have been killed at 3 s now hold goroutine/thread resources for 30 s, cascading into resource exhaustion under normal traffic.",
+    "resolution": "Rolled back nginx.conf to previous configmap version via kubectl rollout undo. Traffic recovered in 90 seconds. Applied corrected config with timeout scoped inside the specific location block. Added required nginx-config-review step to gateway PR template. Mandatory staging soak of 15 min for any gateway change.",
+    "services_affected": [
+      "gateway-api",
+      "auth-service",
+      "user-service"
+    ],
+    "related_prs": [
+      "PR-108"
+    ],
+    "oncall_engineer": "bob_martinez",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1008",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1032",
+    "title": "checkout-service serving stale prices \u2014 40% flash sale discount not applied",
+    "service": "checkout-service",
+    "severity": "SEV2",
+    "timestamp": "2025-01-27T02:00:00Z",
+    "resolved_at": "2024-09-25T10:22:00Z",
+    "duration_minutes": 25,
+    "symptoms": [
+      "47 customer support tickets in 2 hours: 'discount not showing at checkout'",
+      "Revenue analytics: 14% below forecast for past 4 hours",
+      "Flash sale price of $29.99 showing as $49.99 at checkout",
+      "Prices on product listing page differ from cart total",
+      "New A/B test pricing cohort not receiving test prices"
+    ],
+    "root_cause": "The cache invalidation webhook began silently failing 6 days ago after a service account token was rotated as part of a security audit. The webhook endpoint returned 401 on every price update, but there was no alerting on 4xx responses from this webhook. With a 24 h TTL and broken invalidation, all price changes were invisible to checkout-service for up to 24 hours. The 09:00 flash sale prices never propagated.",
+    "resolution": "Rotated webhook service account token. Manually flushed all price cache entries via cache admin API. Reverted TTL to 5 minutes as interim measure. Added Datadog monitor on webhook endpoint HTTP response codes (alert on any 4xx/5xx). Added cache invalidation lag metric \u2014 alert if any SKU price not refreshed in >10 min.",
+    "services_affected": [
+      "checkout-service",
+      "payment-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-104"
+    ],
+    "oncall_engineer": "carol_kim",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1004",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1033",
+    "title": "notification-service retry storm overloading SendGrid \u2014 cascading to payment receipts",
+    "service": "notification-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-16T10:00:00Z",
+    "resolved_at": "2024-09-19T10:24:00Z",
+    "duration_minutes": 75,
+    "symptoms": [
+      "SendGrid API returning 503 with message 'too many requests from single source'",
+      "notification-service thread pool at 100% \u2014 2 000 threads all in retry backoff",
+      "Retry queue depth growing at 45 000 messages/minute",
+      "payment-service: order confirmation emails not delivered for 55 minutes",
+      "auth-service: password reset emails silently dropped",
+      "CPU on notification-service sustained at 98% for 60 minutes"
+    ],
+    "root_cause": "SendGrid had a 20-minute partial outage. Without circuit breaking, all 2 000 worker threads continued attempting delivery. Exponential backoff state is in-memory per-thread and does not coordinate across threads, so the aggregate retry rate actually increased over time. By the time SendGrid recovered, our retry storm was generating 80 000 req/min against their API, triggering their global rate limiter and extending the incident by 35 minutes.",
+    "resolution": "Deployed emergency env-var-configured circuit breaker (open after 10 failures in 30 s). Drained retry queue via dead-letter queue replay with rate limiting. Coordinated with SendGrid support to whitelist our IPs temporarily. Added circuit breaker as required field in PR template for any external HTTP client.",
+    "services_affected": [
+      "notification-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-103"
+    ],
+    "oncall_engineer": "carol_kim",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1003",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1034",
+    "title": "gateway-api global 30-second timeout regression \u2014 thread pool saturating",
+    "service": "gateway-api",
+    "severity": "SEV2",
+    "timestamp": "2025-01-04T04:00:00Z",
+    "resolved_at": "2024-10-18T13:19:00Z",
+    "duration_minutes": 24,
+    "symptoms": [
+      "All endpoint p99 latencies jumped to exactly 30 000 ms",
+      "Requests that previously failed fast at 3 s now hold threads for 30 s",
+      "DB connection pool exhausted as long-running queries held connections open",
+      "Kubernetes: gateway-api HPA scaling to max replicas (50) but not recovering",
+      "Error budget: 9% of monthly SLO budget consumed in 50 minutes"
+    ],
+    "root_cause": "The NGINX config change placed proxy_read_timeout 30s in the http {} block instead of inside the location /api/v2/recommendations {} block. This set the global read timeout for ALL upstream connections to 30 s. Slow upstream responses that would have been killed at 3 s now hold goroutine/thread resources for 30 s, cascading into resource exhaustion under normal traffic.",
+    "resolution": "Rolled back nginx.conf to previous configmap version via kubectl rollout undo. Traffic recovered in 90 seconds. Applied corrected config with timeout scoped inside the specific location block. Added required nginx-config-review step to gateway PR template. Mandatory staging soak of 15 min for any gateway change.",
+    "services_affected": [
+      "gateway-api",
+      "auth-service",
+      "user-service"
+    ],
+    "related_prs": [
+      "PR-108"
+    ],
+    "oncall_engineer": "bob_martinez",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1008",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1035",
+    "title": "notification-service retry storm overloading SendGrid \u2014 cascading to payment receipts",
+    "service": "notification-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-23T22:00:00Z",
+    "resolved_at": "2024-09-19T10:24:00Z",
+    "duration_minutes": 75,
+    "symptoms": [
+      "SendGrid API returning 503 with message 'too many requests from single source'",
+      "notification-service thread pool at 100% \u2014 2 000 threads all in retry backoff",
+      "Retry queue depth growing at 45 000 messages/minute",
+      "payment-service: order confirmation emails not delivered for 55 minutes",
+      "auth-service: password reset emails silently dropped",
+      "CPU on notification-service sustained at 98% for 60 minutes"
+    ],
+    "root_cause": "SendGrid had a 20-minute partial outage. Without circuit breaking, all 2 000 worker threads continued attempting delivery. Exponential backoff state is in-memory per-thread and does not coordinate across threads, so the aggregate retry rate actually increased over time. By the time SendGrid recovered, our retry storm was generating 80 000 req/min against their API, triggering their global rate limiter and extending the incident by 35 minutes.",
+    "resolution": "Deployed emergency env-var-configured circuit breaker (open after 10 failures in 30 s). Drained retry queue via dead-letter queue replay with rate limiting. Coordinated with SendGrid support to whitelist our IPs temporarily. Added circuit breaker as required field in PR template for any external HTTP client.",
+    "services_affected": [
+      "notification-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-103"
+    ],
+    "oncall_engineer": "bob_martinez",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1003",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1036",
+    "title": "notification-service retry storm overloading SendGrid \u2014 cascading to payment receipts",
+    "service": "notification-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-03T13:00:00Z",
+    "resolved_at": "2024-09-19T10:24:00Z",
+    "duration_minutes": 75,
+    "symptoms": [
+      "SendGrid API returning 503 with message 'too many requests from single source'",
+      "notification-service thread pool at 100% \u2014 2 000 threads all in retry backoff",
+      "Retry queue depth growing at 45 000 messages/minute",
+      "payment-service: order confirmation emails not delivered for 55 minutes",
+      "auth-service: password reset emails silently dropped",
+      "CPU on notification-service sustained at 98% for 60 minutes"
+    ],
+    "root_cause": "SendGrid had a 20-minute partial outage. Without circuit breaking, all 2 000 worker threads continued attempting delivery. Exponential backoff state is in-memory per-thread and does not coordinate across threads, so the aggregate retry rate actually increased over time. By the time SendGrid recovered, our retry storm was generating 80 000 req/min against their API, triggering their global rate limiter and extending the incident by 35 minutes.",
+    "resolution": "Deployed emergency env-var-configured circuit breaker (open after 10 failures in 30 s). Drained retry queue via dead-letter queue replay with rate limiting. Coordinated with SendGrid support to whitelist our IPs temporarily. Added circuit breaker as required field in PR template for any external HTTP client.",
+    "services_affected": [
+      "notification-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-103"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1003",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1037",
+    "title": "order-service DB CPU at 100% \u2014 N+1 query regression in order history",
+    "service": "order-service",
+    "severity": "SEV2",
+    "timestamp": "2025-02-02T14:00:00Z",
+    "resolved_at": "2024-10-03T18:20:00Z",
+    "duration_minutes": 91,
+    "symptoms": [
+      "Primary DB CPU jumped from 18% to 99% within 12 minutes of deploy",
+      "Slow query log: 80 000 individual SELECT on products table per minute",
+      "GET /orders/history p99 latency: 140 ms \u2192 9 200 ms",
+      "Read replica replication lag: 52 seconds behind primary",
+      "DB connection pool at 97% \u2014 downstream services starting to queue"
+    ],
+    "root_cause": "ProductService.get_by_id() is called once per order item in a Python for-loop, issuing one SELECT per call. A user with 20 orders \u00d7 6 items = 120 individual SELECTs per page load. At peak of 700 concurrent users loading order history: 84 000 queries/minute against a DB cluster tuned for 6 000 queries/minute. The test suite used a fixture with 1 order \u00d7 1 item, masking the N+1 completely.",
+    "resolution": "Hotfix: replaced loop with single SELECT ... WHERE id IN (all_item_ids) batch query. Deployed behind feature flag, validated 99.8% query reduction in staging. DB CPU back to 16% within 3 minutes of hotfix. Added query count assertion to integration test: assert mock_db.call_count == 1.",
+    "services_affected": [
+      "order-service",
+      "user-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-105"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1005",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1038",
+    "title": "checkout-service rate limiter throttling legitimate users \u2014 40% checkout failure rate",
+    "service": "checkout-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-12T13:00:00Z",
+    "resolved_at": "2024-09-02T23:22:00Z",
+    "duration_minutes": 20,
+    "symptoms": [
+      "HTTP 429 rate spiked from near-zero to 38% of all responses",
+      "Checkout funnel abandonment increased 4\u00d7 in real-time analytics",
+      "p99 latency on POST /checkout jumped from 320 ms to 5 200 ms",
+      "Support queue: 200+ tickets in 90 minutes about failed payments",
+      "order-service receiving 60% fewer order-created events than baseline"
+    ],
+    "root_cause": "The fixed-window counter was applied at the global service level rather than per user. All traffic shares a single counter that resets every 60 seconds. At 08:45 UTC normal morning traffic naturally exceeded 100 requests within the window, causing the counter to block ALL subsequent requests for the remainder of the minute, including legitimate checkouts.",
+    "resolution": "Rolled back rate_limiter.py to the previous sliding-window implementation. Temporarily set global limit to 10 000 req/min as blast radius control. Created follow-up ticket to implement true per-user Redis sorted-set rate limiting with a load test gate before merge.",
+    "services_affected": [
+      "checkout-service",
+      "payment-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-100"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1000",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1039",
+    "title": "payment-service DB deadlocks spiking \u2014 23% payment failure rate",
+    "service": "payment-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-28T22:00:00Z",
+    "resolved_at": "2024-10-23T12:08:00Z",
+    "duration_minutes": 49,
+    "symptoms": [
+      "MySQL: 'Deadlock found when trying to get lock; try restarting transaction'",
+      "POST /payments error rate: 0.1% \u2192 23% within 6 minutes of deploy",
+      "p99 payment latency: 45 ms \u2192 14 000 ms",
+      "Retry storms from iOS/Android clients amplifying deadlock contention",
+      "Slow query log: SELECT FOR UPDATE on idempotency_keys holding locks >8 s"
+    ],
+    "root_cause": "The idempotency lock (SELECT FOR UPDATE on idempotency_keys) is held while waiting for Stripe's response, which takes 2\u20138 s. A mobile client that retries after a network timeout creates a second request with the same idempotency key. Both requests acquire overlapping row locks \u2014 one on idempotency_keys, one on payment_transactions \u2014 in opposite order, creating a classic AB/BA deadlock. Mobile retry logic amplifies this: each deadlock triggers 3 retries, worsening contention exponentially under load.",
+    "resolution": "Replaced SELECT FOR UPDATE with INSERT ... ON DUPLICATE KEY UPDATE (optimistic lock). Moved Stripe API call outside the transaction boundary. Added innodb_lock_wait_timeout=2. Added client-side retry jitter (100\u2013500 ms random backoff) in mobile SDK. Payment failure rate returned to 0.08% within 5 minutes of hotfix.",
+    "services_affected": [
+      "payment-service",
+      "checkout-service"
+    ],
+    "related_prs": [
+      "PR-109"
+    ],
+    "oncall_engineer": "alice_chen",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1009",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1040",
+    "title": "payment-service DB deadlocks spiking \u2014 23% payment failure rate",
+    "service": "payment-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-23T15:00:00Z",
+    "resolved_at": "2024-10-23T12:08:00Z",
+    "duration_minutes": 49,
+    "symptoms": [
+      "MySQL: 'Deadlock found when trying to get lock; try restarting transaction'",
+      "POST /payments error rate: 0.1% \u2192 23% within 6 minutes of deploy",
+      "p99 payment latency: 45 ms \u2192 14 000 ms",
+      "Retry storms from iOS/Android clients amplifying deadlock contention",
+      "Slow query log: SELECT FOR UPDATE on idempotency_keys holding locks >8 s"
+    ],
+    "root_cause": "The idempotency lock (SELECT FOR UPDATE on idempotency_keys) is held while waiting for Stripe's response, which takes 2\u20138 s. A mobile client that retries after a network timeout creates a second request with the same idempotency key. Both requests acquire overlapping row locks \u2014 one on idempotency_keys, one on payment_transactions \u2014 in opposite order, creating a classic AB/BA deadlock. Mobile retry logic amplifies this: each deadlock triggers 3 retries, worsening contention exponentially under load.",
+    "resolution": "Replaced SELECT FOR UPDATE with INSERT ... ON DUPLICATE KEY UPDATE (optimistic lock). Moved Stripe API call outside the transaction boundary. Added innodb_lock_wait_timeout=2. Added client-side retry jitter (100\u2013500 ms random backoff) in mobile SDK. Payment failure rate returned to 0.08% within 5 minutes of hotfix.",
+    "services_affected": [
+      "payment-service",
+      "checkout-service"
+    ],
+    "related_prs": [
+      "PR-109"
+    ],
+    "oncall_engineer": "alice_chen",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1009",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1041",
+    "title": "order-service DB CPU at 100% \u2014 N+1 query regression in order history",
+    "service": "order-service",
+    "severity": "SEV2",
+    "timestamp": "2025-01-18T12:00:00Z",
+    "resolved_at": "2024-10-03T18:20:00Z",
+    "duration_minutes": 91,
+    "symptoms": [
+      "Primary DB CPU jumped from 18% to 99% within 12 minutes of deploy",
+      "Slow query log: 80 000 individual SELECT on products table per minute",
+      "GET /orders/history p99 latency: 140 ms \u2192 9 200 ms",
+      "Read replica replication lag: 52 seconds behind primary",
+      "DB connection pool at 97% \u2014 downstream services starting to queue"
+    ],
+    "root_cause": "ProductService.get_by_id() is called once per order item in a Python for-loop, issuing one SELECT per call. A user with 20 orders \u00d7 6 items = 120 individual SELECTs per page load. At peak of 700 concurrent users loading order history: 84 000 queries/minute against a DB cluster tuned for 6 000 queries/minute. The test suite used a fixture with 1 order \u00d7 1 item, masking the N+1 completely.",
+    "resolution": "Hotfix: replaced loop with single SELECT ... WHERE id IN (all_item_ids) batch query. Deployed behind feature flag, validated 99.8% query reduction in staging. DB CPU back to 16% within 3 minutes of hotfix. Added query count assertion to integration test: assert mock_db.call_count == 1.",
+    "services_affected": [
+      "order-service",
+      "user-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-105"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1005",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1042",
+    "title": "gateway-api global 30-second timeout regression \u2014 thread pool saturating",
+    "service": "gateway-api",
+    "severity": "SEV2",
+    "timestamp": "2025-02-15T23:00:00Z",
+    "resolved_at": "2024-10-18T13:19:00Z",
+    "duration_minutes": 24,
+    "symptoms": [
+      "All endpoint p99 latencies jumped to exactly 30 000 ms",
+      "Requests that previously failed fast at 3 s now hold threads for 30 s",
+      "DB connection pool exhausted as long-running queries held connections open",
+      "Kubernetes: gateway-api HPA scaling to max replicas (50) but not recovering",
+      "Error budget: 9% of monthly SLO budget consumed in 50 minutes"
+    ],
+    "root_cause": "The NGINX config change placed proxy_read_timeout 30s in the http {} block instead of inside the location /api/v2/recommendations {} block. This set the global read timeout for ALL upstream connections to 30 s. Slow upstream responses that would have been killed at 3 s now hold goroutine/thread resources for 30 s, cascading into resource exhaustion under normal traffic.",
+    "resolution": "Rolled back nginx.conf to previous configmap version via kubectl rollout undo. Traffic recovered in 90 seconds. Applied corrected config with timeout scoped inside the specific location block. Added required nginx-config-review step to gateway PR template. Mandatory staging soak of 15 min for any gateway change.",
+    "services_affected": [
+      "gateway-api",
+      "auth-service",
+      "user-service"
+    ],
+    "related_prs": [
+      "PR-108"
+    ],
+    "oncall_engineer": "eve_thompson",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1008",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1043",
+    "title": "payment-service DB deadlocks spiking \u2014 23% payment failure rate",
+    "service": "payment-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-25T07:00:00Z",
+    "resolved_at": "2024-10-23T12:08:00Z",
+    "duration_minutes": 49,
+    "symptoms": [
+      "MySQL: 'Deadlock found when trying to get lock; try restarting transaction'",
+      "POST /payments error rate: 0.1% \u2192 23% within 6 minutes of deploy",
+      "p99 payment latency: 45 ms \u2192 14 000 ms",
+      "Retry storms from iOS/Android clients amplifying deadlock contention",
+      "Slow query log: SELECT FOR UPDATE on idempotency_keys holding locks >8 s"
+    ],
+    "root_cause": "The idempotency lock (SELECT FOR UPDATE on idempotency_keys) is held while waiting for Stripe's response, which takes 2\u20138 s. A mobile client that retries after a network timeout creates a second request with the same idempotency key. Both requests acquire overlapping row locks \u2014 one on idempotency_keys, one on payment_transactions \u2014 in opposite order, creating a classic AB/BA deadlock. Mobile retry logic amplifies this: each deadlock triggers 3 retries, worsening contention exponentially under load.",
+    "resolution": "Replaced SELECT FOR UPDATE with INSERT ... ON DUPLICATE KEY UPDATE (optimistic lock). Moved Stripe API call outside the transaction boundary. Added innodb_lock_wait_timeout=2. Added client-side retry jitter (100\u2013500 ms random backoff) in mobile SDK. Payment failure rate returned to 0.08% within 5 minutes of hotfix.",
+    "services_affected": [
+      "payment-service",
+      "checkout-service"
+    ],
+    "related_prs": [
+      "PR-109"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1009",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1044",
+    "title": "notification-service retry storm overloading SendGrid \u2014 cascading to payment receipts",
+    "service": "notification-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-16T13:00:00Z",
+    "resolved_at": "2024-09-19T10:24:00Z",
+    "duration_minutes": 75,
+    "symptoms": [
+      "SendGrid API returning 503 with message 'too many requests from single source'",
+      "notification-service thread pool at 100% \u2014 2 000 threads all in retry backoff",
+      "Retry queue depth growing at 45 000 messages/minute",
+      "payment-service: order confirmation emails not delivered for 55 minutes",
+      "auth-service: password reset emails silently dropped",
+      "CPU on notification-service sustained at 98% for 60 minutes"
+    ],
+    "root_cause": "SendGrid had a 20-minute partial outage. Without circuit breaking, all 2 000 worker threads continued attempting delivery. Exponential backoff state is in-memory per-thread and does not coordinate across threads, so the aggregate retry rate actually increased over time. By the time SendGrid recovered, our retry storm was generating 80 000 req/min against their API, triggering their global rate limiter and extending the incident by 35 minutes.",
+    "resolution": "Deployed emergency env-var-configured circuit breaker (open after 10 failures in 30 s). Drained retry queue via dead-letter queue replay with rate limiting. Coordinated with SendGrid support to whitelist our IPs temporarily. Added circuit breaker as required field in PR template for any external HTTP client.",
+    "services_affected": [
+      "notification-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-103"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1003",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1045",
+    "title": "checkout-service rate limiter throttling legitimate users \u2014 40% checkout failure rate",
+    "service": "checkout-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-23T10:00:00Z",
+    "resolved_at": "2024-09-02T23:22:00Z",
+    "duration_minutes": 20,
+    "symptoms": [
+      "HTTP 429 rate spiked from near-zero to 38% of all responses",
+      "Checkout funnel abandonment increased 4\u00d7 in real-time analytics",
+      "p99 latency on POST /checkout jumped from 320 ms to 5 200 ms",
+      "Support queue: 200+ tickets in 90 minutes about failed payments",
+      "order-service receiving 60% fewer order-created events than baseline"
+    ],
+    "root_cause": "The fixed-window counter was applied at the global service level rather than per user. All traffic shares a single counter that resets every 60 seconds. At 08:45 UTC normal morning traffic naturally exceeded 100 requests within the window, causing the counter to block ALL subsequent requests for the remainder of the minute, including legitimate checkouts.",
+    "resolution": "Rolled back rate_limiter.py to the previous sliding-window implementation. Temporarily set global limit to 10 000 req/min as blast radius control. Created follow-up ticket to implement true per-user Redis sorted-set rate limiting with a load test gate before merge.",
+    "services_affected": [
+      "checkout-service",
+      "payment-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-100"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1000",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1046",
+    "title": "auth-service OOM-killed every 4\u20136 hours \u2014 memory growing unbounded",
+    "service": "auth-service",
+    "severity": "SEV2",
+    "timestamp": "2025-02-21T14:00:00Z",
+    "resolved_at": "2024-09-14T06:44:00Z",
+    "duration_minutes": 108,
+    "symptoms": [
+      "Kubernetes events: 'OOMKilled' on all 3 auth-service replicas in rotation",
+      "Memory usage grows linearly from 280 MB baseline to ~2.1 GB before kill",
+      "Intermittent 5xx errors during pod restart window (45\u201390 s)",
+      "Token validation p99 latency spikes from 2 ms to 400 ms ahead of each OOM",
+      "Heap dump shows LRUCache holding 50 000 entries at ~42 KB each"
+    ],
+    "root_cause": "The PR description mis-estimated cache memory at ~50 MB. Actual decoded JWT objects include full user claims, roles, and metadata averaging 42 KB each, not 1 KB. At 50 000 entries the cache consumes 2.1 GB. Additionally, the cache was bounded by count not by memory, and no TTL was set, so entries only evict after 50 001 distinct tokens are seen \u2014 meaning active sessions are never evicted.",
+    "resolution": "Added 5-minute TTL to all cache entries. Reduced max-entries to 10 000. Added memory-based eviction threshold at 150 MB via cachetools MemoryCache. Added Grafana panel for cache memory and eviction rate. Auth-service memory now stable at 310\u2013340 MB.",
+    "services_affected": [
+      "auth-service",
+      "gateway-api"
+    ],
+    "related_prs": [
+      "PR-102"
+    ],
+    "oncall_engineer": "bob_martinez",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1002",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1047",
+    "title": "payment-service DB deadlocks spiking \u2014 23% payment failure rate",
+    "service": "payment-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-02T00:00:00Z",
+    "resolved_at": "2024-10-23T12:08:00Z",
+    "duration_minutes": 49,
+    "symptoms": [
+      "MySQL: 'Deadlock found when trying to get lock; try restarting transaction'",
+      "POST /payments error rate: 0.1% \u2192 23% within 6 minutes of deploy",
+      "p99 payment latency: 45 ms \u2192 14 000 ms",
+      "Retry storms from iOS/Android clients amplifying deadlock contention",
+      "Slow query log: SELECT FOR UPDATE on idempotency_keys holding locks >8 s"
+    ],
+    "root_cause": "The idempotency lock (SELECT FOR UPDATE on idempotency_keys) is held while waiting for Stripe's response, which takes 2\u20138 s. A mobile client that retries after a network timeout creates a second request with the same idempotency key. Both requests acquire overlapping row locks \u2014 one on idempotency_keys, one on payment_transactions \u2014 in opposite order, creating a classic AB/BA deadlock. Mobile retry logic amplifies this: each deadlock triggers 3 retries, worsening contention exponentially under load.",
+    "resolution": "Replaced SELECT FOR UPDATE with INSERT ... ON DUPLICATE KEY UPDATE (optimistic lock). Moved Stripe API call outside the transaction boundary. Added innodb_lock_wait_timeout=2. Added client-side retry jitter (100\u2013500 ms random backoff) in mobile SDK. Payment failure rate returned to 0.08% within 5 minutes of hotfix.",
+    "services_affected": [
+      "payment-service",
+      "checkout-service"
+    ],
+    "related_prs": [
+      "PR-109"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1009",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1048",
+    "title": "payment-service DB deadlocks spiking \u2014 23% payment failure rate",
+    "service": "payment-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-04T21:00:00Z",
+    "resolved_at": "2024-10-23T12:08:00Z",
+    "duration_minutes": 49,
+    "symptoms": [
+      "MySQL: 'Deadlock found when trying to get lock; try restarting transaction'",
+      "POST /payments error rate: 0.1% \u2192 23% within 6 minutes of deploy",
+      "p99 payment latency: 45 ms \u2192 14 000 ms",
+      "Retry storms from iOS/Android clients amplifying deadlock contention",
+      "Slow query log: SELECT FOR UPDATE on idempotency_keys holding locks >8 s"
+    ],
+    "root_cause": "The idempotency lock (SELECT FOR UPDATE on idempotency_keys) is held while waiting for Stripe's response, which takes 2\u20138 s. A mobile client that retries after a network timeout creates a second request with the same idempotency key. Both requests acquire overlapping row locks \u2014 one on idempotency_keys, one on payment_transactions \u2014 in opposite order, creating a classic AB/BA deadlock. Mobile retry logic amplifies this: each deadlock triggers 3 retries, worsening contention exponentially under load.",
+    "resolution": "Replaced SELECT FOR UPDATE with INSERT ... ON DUPLICATE KEY UPDATE (optimistic lock). Moved Stripe API call outside the transaction boundary. Added innodb_lock_wait_timeout=2. Added client-side retry jitter (100\u2013500 ms random backoff) in mobile SDK. Payment failure rate returned to 0.08% within 5 minutes of hotfix.",
+    "services_affected": [
+      "payment-service",
+      "checkout-service"
+    ],
+    "related_prs": [
+      "PR-109"
+    ],
+    "oncall_engineer": "alice_chen",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1009",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1049",
+    "title": "order-service DB connection pool exhausted \u2014 orders failing at 88% error rate",
+    "service": "order-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-09T13:00:00Z",
+    "resolved_at": "2024-09-08T00:25:00Z",
+    "duration_minutes": 110,
+    "symptoms": [
+      "Error log: 'QueuePool limit overflow, max_overflow 0 current overflow 20'",
+      "Order creation success rate fell from 99.9% to 12% within 8 minutes of deploy",
+      "DB connection wait p99 jumped from 2 ms to 48 000 ms",
+      "inventory-service receiving 11\u00d7 its normal request volume",
+      "Kubernetes pod restarts on order-service every ~4 minutes (liveness probe)"
+    ],
+    "root_cause": "Each cart with N items now opens N concurrent DB connections in inventory-service (one per SELECT). An average cart has 8 items; peak traffic has 300 concurrent checkouts, yielding 2 400 simultaneous DB connections against a pool capped at 20. A missing connection.close() in the error path leaks connections that are never returned to the pool, accelerating exhaustion.",
+    "resolution": "Hotfix deployed: added finally: conn.close() in inventory_client.py. Batched all per-item lookups into a single SELECT ... WHERE id IN (...) query. Increased pool size to 50 as temporary buffer. Added Prometheus alert on pool utilization > 75%.",
+    "services_affected": [
+      "order-service",
+      "user-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-101"
+    ],
+    "oncall_engineer": "bob_martinez",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1001",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1050",
+    "title": "payment-service Stripe webhook validation broken \u2014 orders stuck in payment_pending",
+    "service": "payment-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-10T01:00:00Z",
+    "resolved_at": "2024-10-15T21:36:00Z",
+    "duration_minutes": 105,
+    "symptoms": [
+      "Stripe dashboard: webhook delivery failure rate 100%, all returning HTTP 400",
+      "Order status stuck in 'payment_pending' for all orders since 14:32 UTC",
+      "Customers charged on Stripe but receiving no order confirmation",
+      "payment-service logs: 'SignatureVerificationError: No signatures found'",
+      "Support: 300+ tickets 'I was charged but my order disappeared'"
+    ],
+    "root_cause": "Stripe SDK v3.0.0 changed Webhook.construct_event() to require raw request bytes for HMAC verification. webhook_handler.py called request.json() (which parses then re-serializes the body) before passing to construct_event(). Re-serialization changes key ordering and whitespace, invalidating the HMAC. The 30-minute canary soak did not catch this because no Stripe webhooks were delivered to the canary instance during that window.",
+    "resolution": "Fix: changed request.json() to request.get_data(as_text=False) in webhook_handler.py. Replayed all failed webhook events from Stripe dashboard (Events API, last 6 hours). Manually reconciled 847 orders stuck in payment_pending. Added integration test using real raw bytes from Stripe test fixture, not reconstructed JSON.",
+    "services_affected": [
+      "payment-service",
+      "checkout-service",
+      "order-service",
+      "notification-service"
+    ],
+    "related_prs": [
+      "PR-107"
+    ],
+    "oncall_engineer": "carol_kim",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1007",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1051",
+    "title": "auth-service mTLS certificate expired \u2014 100% login failure",
+    "service": "auth-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-19T06:00:00Z",
+    "resolved_at": "2024-10-09T12:33:00Z",
+    "duration_minutes": 42,
+    "symptoms": [
+      "SSL handshake errors: 'certificate has expired or is not yet valid'",
+      "auth-service \u2192 user-service gRPC calls failing with UNAVAILABLE",
+      "All mobile/web login attempts returning 503",
+      "cert-manager logs: 'Not renewing, renewBefore window not reached'",
+      "Oncall paged: auth-service availability dropped to 0% for 8 minutes"
+    ],
+    "root_cause": "When the PR changed renewBefore from 30 days to 7 days, cert-manager re-evaluated all managed certificates. The existing cert had 23 days remaining \u2014 within the old 30-day window but outside the new 7-day window. cert-manager determined 'no renewal needed' since 23 > 7. The cert was never renewed. 23 days later it expired with no automated action triggered and no monitoring alert because cert-expiry alerting only fires at <7 days.",
+    "resolution": "Manually triggered cert rotation: kubectl annotate cert auth-service-tls cert-manager.io/issueAsCertificateRequest=true. Services recovered in 4 minutes after cert propagation. Added cert expiry alert at 14 days AND 7 days. Added CI check: cert expiry must be >30 days after any cert-manager config change.",
+    "services_affected": [
+      "auth-service",
+      "gateway-api",
+      "user-service"
+    ],
+    "related_prs": [
+      "PR-106"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1006",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1052",
+    "title": "order-service DB CPU at 100% \u2014 N+1 query regression in order history",
+    "service": "order-service",
+    "severity": "SEV2",
+    "timestamp": "2025-01-20T12:00:00Z",
+    "resolved_at": "2024-10-03T18:20:00Z",
+    "duration_minutes": 91,
+    "symptoms": [
+      "Primary DB CPU jumped from 18% to 99% within 12 minutes of deploy",
+      "Slow query log: 80 000 individual SELECT on products table per minute",
+      "GET /orders/history p99 latency: 140 ms \u2192 9 200 ms",
+      "Read replica replication lag: 52 seconds behind primary",
+      "DB connection pool at 97% \u2014 downstream services starting to queue"
+    ],
+    "root_cause": "ProductService.get_by_id() is called once per order item in a Python for-loop, issuing one SELECT per call. A user with 20 orders \u00d7 6 items = 120 individual SELECTs per page load. At peak of 700 concurrent users loading order history: 84 000 queries/minute against a DB cluster tuned for 6 000 queries/minute. The test suite used a fixture with 1 order \u00d7 1 item, masking the N+1 completely.",
+    "resolution": "Hotfix: replaced loop with single SELECT ... WHERE id IN (all_item_ids) batch query. Deployed behind feature flag, validated 99.8% query reduction in staging. DB CPU back to 16% within 3 minutes of hotfix. Added query count assertion to integration test: assert mock_db.call_count == 1.",
+    "services_affected": [
+      "order-service",
+      "user-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-105"
+    ],
+    "oncall_engineer": "carol_kim",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1005",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1053",
+    "title": "auth-service mTLS certificate expired \u2014 100% login failure",
+    "service": "auth-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-15T02:00:00Z",
+    "resolved_at": "2024-10-09T12:33:00Z",
+    "duration_minutes": 42,
+    "symptoms": [
+      "SSL handshake errors: 'certificate has expired or is not yet valid'",
+      "auth-service \u2192 user-service gRPC calls failing with UNAVAILABLE",
+      "All mobile/web login attempts returning 503",
+      "cert-manager logs: 'Not renewing, renewBefore window not reached'",
+      "Oncall paged: auth-service availability dropped to 0% for 8 minutes"
+    ],
+    "root_cause": "When the PR changed renewBefore from 30 days to 7 days, cert-manager re-evaluated all managed certificates. The existing cert had 23 days remaining \u2014 within the old 30-day window but outside the new 7-day window. cert-manager determined 'no renewal needed' since 23 > 7. The cert was never renewed. 23 days later it expired with no automated action triggered and no monitoring alert because cert-expiry alerting only fires at <7 days.",
+    "resolution": "Manually triggered cert rotation: kubectl annotate cert auth-service-tls cert-manager.io/issueAsCertificateRequest=true. Services recovered in 4 minutes after cert propagation. Added cert expiry alert at 14 days AND 7 days. Added CI check: cert expiry must be >30 days after any cert-manager config change.",
+    "services_affected": [
+      "auth-service",
+      "gateway-api",
+      "user-service"
+    ],
+    "related_prs": [
+      "PR-106"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1006",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1054",
+    "title": "checkout-service rate limiter throttling legitimate users \u2014 40% checkout failure rate",
+    "service": "checkout-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-15T17:00:00Z",
+    "resolved_at": "2024-09-02T23:22:00Z",
+    "duration_minutes": 20,
+    "symptoms": [
+      "HTTP 429 rate spiked from near-zero to 38% of all responses",
+      "Checkout funnel abandonment increased 4\u00d7 in real-time analytics",
+      "p99 latency on POST /checkout jumped from 320 ms to 5 200 ms",
+      "Support queue: 200+ tickets in 90 minutes about failed payments",
+      "order-service receiving 60% fewer order-created events than baseline"
+    ],
+    "root_cause": "The fixed-window counter was applied at the global service level rather than per user. All traffic shares a single counter that resets every 60 seconds. At 08:45 UTC normal morning traffic naturally exceeded 100 requests within the window, causing the counter to block ALL subsequent requests for the remainder of the minute, including legitimate checkouts.",
+    "resolution": "Rolled back rate_limiter.py to the previous sliding-window implementation. Temporarily set global limit to 10 000 req/min as blast radius control. Created follow-up ticket to implement true per-user Redis sorted-set rate limiting with a load test gate before merge.",
+    "services_affected": [
+      "checkout-service",
+      "payment-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-100"
+    ],
+    "oncall_engineer": "alice_chen",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1000",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1055",
+    "title": "order-service DB CPU at 100% \u2014 N+1 query regression in order history",
+    "service": "order-service",
+    "severity": "SEV2",
+    "timestamp": "2025-01-13T20:00:00Z",
+    "resolved_at": "2024-10-03T18:20:00Z",
+    "duration_minutes": 91,
+    "symptoms": [
+      "Primary DB CPU jumped from 18% to 99% within 12 minutes of deploy",
+      "Slow query log: 80 000 individual SELECT on products table per minute",
+      "GET /orders/history p99 latency: 140 ms \u2192 9 200 ms",
+      "Read replica replication lag: 52 seconds behind primary",
+      "DB connection pool at 97% \u2014 downstream services starting to queue"
+    ],
+    "root_cause": "ProductService.get_by_id() is called once per order item in a Python for-loop, issuing one SELECT per call. A user with 20 orders \u00d7 6 items = 120 individual SELECTs per page load. At peak of 700 concurrent users loading order history: 84 000 queries/minute against a DB cluster tuned for 6 000 queries/minute. The test suite used a fixture with 1 order \u00d7 1 item, masking the N+1 completely.",
+    "resolution": "Hotfix: replaced loop with single SELECT ... WHERE id IN (all_item_ids) batch query. Deployed behind feature flag, validated 99.8% query reduction in staging. DB CPU back to 16% within 3 minutes of hotfix. Added query count assertion to integration test: assert mock_db.call_count == 1.",
+    "services_affected": [
+      "order-service",
+      "user-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-105"
+    ],
+    "oncall_engineer": "alice_chen",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1005",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1056",
+    "title": "checkout-service rate limiter throttling legitimate users \u2014 40% checkout failure rate",
+    "service": "checkout-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-16T00:00:00Z",
+    "resolved_at": "2024-09-02T23:22:00Z",
+    "duration_minutes": 20,
+    "symptoms": [
+      "HTTP 429 rate spiked from near-zero to 38% of all responses",
+      "Checkout funnel abandonment increased 4\u00d7 in real-time analytics",
+      "p99 latency on POST /checkout jumped from 320 ms to 5 200 ms",
+      "Support queue: 200+ tickets in 90 minutes about failed payments",
+      "order-service receiving 60% fewer order-created events than baseline"
+    ],
+    "root_cause": "The fixed-window counter was applied at the global service level rather than per user. All traffic shares a single counter that resets every 60 seconds. At 08:45 UTC normal morning traffic naturally exceeded 100 requests within the window, causing the counter to block ALL subsequent requests for the remainder of the minute, including legitimate checkouts.",
+    "resolution": "Rolled back rate_limiter.py to the previous sliding-window implementation. Temporarily set global limit to 10 000 req/min as blast radius control. Created follow-up ticket to implement true per-user Redis sorted-set rate limiting with a load test gate before merge.",
+    "services_affected": [
+      "checkout-service",
+      "payment-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-100"
+    ],
+    "oncall_engineer": "bob_martinez",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1000",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1057",
+    "title": "notification-service retry storm overloading SendGrid \u2014 cascading to payment receipts",
+    "service": "notification-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-21T00:00:00Z",
+    "resolved_at": "2024-09-19T10:24:00Z",
+    "duration_minutes": 75,
+    "symptoms": [
+      "SendGrid API returning 503 with message 'too many requests from single source'",
+      "notification-service thread pool at 100% \u2014 2 000 threads all in retry backoff",
+      "Retry queue depth growing at 45 000 messages/minute",
+      "payment-service: order confirmation emails not delivered for 55 minutes",
+      "auth-service: password reset emails silently dropped",
+      "CPU on notification-service sustained at 98% for 60 minutes"
+    ],
+    "root_cause": "SendGrid had a 20-minute partial outage. Without circuit breaking, all 2 000 worker threads continued attempting delivery. Exponential backoff state is in-memory per-thread and does not coordinate across threads, so the aggregate retry rate actually increased over time. By the time SendGrid recovered, our retry storm was generating 80 000 req/min against their API, triggering their global rate limiter and extending the incident by 35 minutes.",
+    "resolution": "Deployed emergency env-var-configured circuit breaker (open after 10 failures in 30 s). Drained retry queue via dead-letter queue replay with rate limiting. Coordinated with SendGrid support to whitelist our IPs temporarily. Added circuit breaker as required field in PR template for any external HTTP client.",
+    "services_affected": [
+      "notification-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-103"
+    ],
+    "oncall_engineer": "eve_thompson",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1003",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1058",
+    "title": "auth-service OOM-killed every 4\u20136 hours \u2014 memory growing unbounded",
+    "service": "auth-service",
+    "severity": "SEV2",
+    "timestamp": "2025-01-14T04:00:00Z",
+    "resolved_at": "2024-09-14T06:44:00Z",
+    "duration_minutes": 108,
+    "symptoms": [
+      "Kubernetes events: 'OOMKilled' on all 3 auth-service replicas in rotation",
+      "Memory usage grows linearly from 280 MB baseline to ~2.1 GB before kill",
+      "Intermittent 5xx errors during pod restart window (45\u201390 s)",
+      "Token validation p99 latency spikes from 2 ms to 400 ms ahead of each OOM",
+      "Heap dump shows LRUCache holding 50 000 entries at ~42 KB each"
+    ],
+    "root_cause": "The PR description mis-estimated cache memory at ~50 MB. Actual decoded JWT objects include full user claims, roles, and metadata averaging 42 KB each, not 1 KB. At 50 000 entries the cache consumes 2.1 GB. Additionally, the cache was bounded by count not by memory, and no TTL was set, so entries only evict after 50 001 distinct tokens are seen \u2014 meaning active sessions are never evicted.",
+    "resolution": "Added 5-minute TTL to all cache entries. Reduced max-entries to 10 000. Added memory-based eviction threshold at 150 MB via cachetools MemoryCache. Added Grafana panel for cache memory and eviction rate. Auth-service memory now stable at 310\u2013340 MB.",
+    "services_affected": [
+      "auth-service",
+      "gateway-api"
+    ],
+    "related_prs": [
+      "PR-102"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1002",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1059",
+    "title": "order-service DB connection pool exhausted \u2014 orders failing at 88% error rate",
+    "service": "order-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-04T06:00:00Z",
+    "resolved_at": "2024-09-08T00:25:00Z",
+    "duration_minutes": 110,
+    "symptoms": [
+      "Error log: 'QueuePool limit overflow, max_overflow 0 current overflow 20'",
+      "Order creation success rate fell from 99.9% to 12% within 8 minutes of deploy",
+      "DB connection wait p99 jumped from 2 ms to 48 000 ms",
+      "inventory-service receiving 11\u00d7 its normal request volume",
+      "Kubernetes pod restarts on order-service every ~4 minutes (liveness probe)"
+    ],
+    "root_cause": "Each cart with N items now opens N concurrent DB connections in inventory-service (one per SELECT). An average cart has 8 items; peak traffic has 300 concurrent checkouts, yielding 2 400 simultaneous DB connections against a pool capped at 20. A missing connection.close() in the error path leaks connections that are never returned to the pool, accelerating exhaustion.",
+    "resolution": "Hotfix deployed: added finally: conn.close() in inventory_client.py. Batched all per-item lookups into a single SELECT ... WHERE id IN (...) query. Increased pool size to 50 as temporary buffer. Added Prometheus alert on pool utilization > 75%.",
+    "services_affected": [
+      "order-service",
+      "user-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-101"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1001",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1060",
+    "title": "checkout-service serving stale prices \u2014 40% flash sale discount not applied",
+    "service": "checkout-service",
+    "severity": "SEV2",
+    "timestamp": "2025-02-17T11:00:00Z",
+    "resolved_at": "2024-09-25T10:22:00Z",
+    "duration_minutes": 25,
+    "symptoms": [
+      "47 customer support tickets in 2 hours: 'discount not showing at checkout'",
+      "Revenue analytics: 14% below forecast for past 4 hours",
+      "Flash sale price of $29.99 showing as $49.99 at checkout",
+      "Prices on product listing page differ from cart total",
+      "New A/B test pricing cohort not receiving test prices"
+    ],
+    "root_cause": "The cache invalidation webhook began silently failing 6 days ago after a service account token was rotated as part of a security audit. The webhook endpoint returned 401 on every price update, but there was no alerting on 4xx responses from this webhook. With a 24 h TTL and broken invalidation, all price changes were invisible to checkout-service for up to 24 hours. The 09:00 flash sale prices never propagated.",
+    "resolution": "Rotated webhook service account token. Manually flushed all price cache entries via cache admin API. Reverted TTL to 5 minutes as interim measure. Added Datadog monitor on webhook endpoint HTTP response codes (alert on any 4xx/5xx). Added cache invalidation lag metric \u2014 alert if any SKU price not refreshed in >10 min.",
+    "services_affected": [
+      "checkout-service",
+      "payment-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-104"
+    ],
+    "oncall_engineer": "bob_martinez",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1004",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1061",
+    "title": "payment-service DB deadlocks spiking \u2014 23% payment failure rate",
+    "service": "payment-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-06T23:00:00Z",
+    "resolved_at": "2024-10-23T12:08:00Z",
+    "duration_minutes": 49,
+    "symptoms": [
+      "MySQL: 'Deadlock found when trying to get lock; try restarting transaction'",
+      "POST /payments error rate: 0.1% \u2192 23% within 6 minutes of deploy",
+      "p99 payment latency: 45 ms \u2192 14 000 ms",
+      "Retry storms from iOS/Android clients amplifying deadlock contention",
+      "Slow query log: SELECT FOR UPDATE on idempotency_keys holding locks >8 s"
+    ],
+    "root_cause": "The idempotency lock (SELECT FOR UPDATE on idempotency_keys) is held while waiting for Stripe's response, which takes 2\u20138 s. A mobile client that retries after a network timeout creates a second request with the same idempotency key. Both requests acquire overlapping row locks \u2014 one on idempotency_keys, one on payment_transactions \u2014 in opposite order, creating a classic AB/BA deadlock. Mobile retry logic amplifies this: each deadlock triggers 3 retries, worsening contention exponentially under load.",
+    "resolution": "Replaced SELECT FOR UPDATE with INSERT ... ON DUPLICATE KEY UPDATE (optimistic lock). Moved Stripe API call outside the transaction boundary. Added innodb_lock_wait_timeout=2. Added client-side retry jitter (100\u2013500 ms random backoff) in mobile SDK. Payment failure rate returned to 0.08% within 5 minutes of hotfix.",
+    "services_affected": [
+      "payment-service",
+      "checkout-service"
+    ],
+    "related_prs": [
+      "PR-109"
+    ],
+    "oncall_engineer": "alice_chen",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1009",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1062",
+    "title": "auth-service OOM-killed every 4\u20136 hours \u2014 memory growing unbounded",
+    "service": "auth-service",
+    "severity": "SEV2",
+    "timestamp": "2025-01-18T03:00:00Z",
+    "resolved_at": "2024-09-14T06:44:00Z",
+    "duration_minutes": 108,
+    "symptoms": [
+      "Kubernetes events: 'OOMKilled' on all 3 auth-service replicas in rotation",
+      "Memory usage grows linearly from 280 MB baseline to ~2.1 GB before kill",
+      "Intermittent 5xx errors during pod restart window (45\u201390 s)",
+      "Token validation p99 latency spikes from 2 ms to 400 ms ahead of each OOM",
+      "Heap dump shows LRUCache holding 50 000 entries at ~42 KB each"
+    ],
+    "root_cause": "The PR description mis-estimated cache memory at ~50 MB. Actual decoded JWT objects include full user claims, roles, and metadata averaging 42 KB each, not 1 KB. At 50 000 entries the cache consumes 2.1 GB. Additionally, the cache was bounded by count not by memory, and no TTL was set, so entries only evict after 50 001 distinct tokens are seen \u2014 meaning active sessions are never evicted.",
+    "resolution": "Added 5-minute TTL to all cache entries. Reduced max-entries to 10 000. Added memory-based eviction threshold at 150 MB via cachetools MemoryCache. Added Grafana panel for cache memory and eviction rate. Auth-service memory now stable at 310\u2013340 MB.",
+    "services_affected": [
+      "auth-service",
+      "gateway-api"
+    ],
+    "related_prs": [
+      "PR-102"
+    ],
+    "oncall_engineer": "eve_thompson",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1002",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1063",
+    "title": "checkout-service rate limiter throttling legitimate users \u2014 40% checkout failure rate",
+    "service": "checkout-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-27T09:00:00Z",
+    "resolved_at": "2024-09-02T23:22:00Z",
+    "duration_minutes": 20,
+    "symptoms": [
+      "HTTP 429 rate spiked from near-zero to 38% of all responses",
+      "Checkout funnel abandonment increased 4\u00d7 in real-time analytics",
+      "p99 latency on POST /checkout jumped from 320 ms to 5 200 ms",
+      "Support queue: 200+ tickets in 90 minutes about failed payments",
+      "order-service receiving 60% fewer order-created events than baseline"
+    ],
+    "root_cause": "The fixed-window counter was applied at the global service level rather than per user. All traffic shares a single counter that resets every 60 seconds. At 08:45 UTC normal morning traffic naturally exceeded 100 requests within the window, causing the counter to block ALL subsequent requests for the remainder of the minute, including legitimate checkouts.",
+    "resolution": "Rolled back rate_limiter.py to the previous sliding-window implementation. Temporarily set global limit to 10 000 req/min as blast radius control. Created follow-up ticket to implement true per-user Redis sorted-set rate limiting with a load test gate before merge.",
+    "services_affected": [
+      "checkout-service",
+      "payment-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-100"
+    ],
+    "oncall_engineer": "eve_thompson",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1000",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1064",
+    "title": "auth-service mTLS certificate expired \u2014 100% login failure",
+    "service": "auth-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-24T22:00:00Z",
+    "resolved_at": "2024-10-09T12:33:00Z",
+    "duration_minutes": 42,
+    "symptoms": [
+      "SSL handshake errors: 'certificate has expired or is not yet valid'",
+      "auth-service \u2192 user-service gRPC calls failing with UNAVAILABLE",
+      "All mobile/web login attempts returning 503",
+      "cert-manager logs: 'Not renewing, renewBefore window not reached'",
+      "Oncall paged: auth-service availability dropped to 0% for 8 minutes"
+    ],
+    "root_cause": "When the PR changed renewBefore from 30 days to 7 days, cert-manager re-evaluated all managed certificates. The existing cert had 23 days remaining \u2014 within the old 30-day window but outside the new 7-day window. cert-manager determined 'no renewal needed' since 23 > 7. The cert was never renewed. 23 days later it expired with no automated action triggered and no monitoring alert because cert-expiry alerting only fires at <7 days.",
+    "resolution": "Manually triggered cert rotation: kubectl annotate cert auth-service-tls cert-manager.io/issueAsCertificateRequest=true. Services recovered in 4 minutes after cert propagation. Added cert expiry alert at 14 days AND 7 days. Added CI check: cert expiry must be >30 days after any cert-manager config change.",
+    "services_affected": [
+      "auth-service",
+      "gateway-api",
+      "user-service"
+    ],
+    "related_prs": [
+      "PR-106"
+    ],
+    "oncall_engineer": "bob_martinez",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1006",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1065",
+    "title": "order-service DB connection pool exhausted \u2014 orders failing at 88% error rate",
+    "service": "order-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-05T22:00:00Z",
+    "resolved_at": "2024-09-08T00:25:00Z",
+    "duration_minutes": 110,
+    "symptoms": [
+      "Error log: 'QueuePool limit overflow, max_overflow 0 current overflow 20'",
+      "Order creation success rate fell from 99.9% to 12% within 8 minutes of deploy",
+      "DB connection wait p99 jumped from 2 ms to 48 000 ms",
+      "inventory-service receiving 11\u00d7 its normal request volume",
+      "Kubernetes pod restarts on order-service every ~4 minutes (liveness probe)"
+    ],
+    "root_cause": "Each cart with N items now opens N concurrent DB connections in inventory-service (one per SELECT). An average cart has 8 items; peak traffic has 300 concurrent checkouts, yielding 2 400 simultaneous DB connections against a pool capped at 20. A missing connection.close() in the error path leaks connections that are never returned to the pool, accelerating exhaustion.",
+    "resolution": "Hotfix deployed: added finally: conn.close() in inventory_client.py. Batched all per-item lookups into a single SELECT ... WHERE id IN (...) query. Increased pool size to 50 as temporary buffer. Added Prometheus alert on pool utilization > 75%.",
+    "services_affected": [
+      "order-service",
+      "user-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-101"
+    ],
+    "oncall_engineer": "bob_martinez",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1001",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1066",
+    "title": "order-service DB connection pool exhausted \u2014 orders failing at 88% error rate",
+    "service": "order-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-12T09:00:00Z",
+    "resolved_at": "2024-09-08T00:25:00Z",
+    "duration_minutes": 110,
+    "symptoms": [
+      "Error log: 'QueuePool limit overflow, max_overflow 0 current overflow 20'",
+      "Order creation success rate fell from 99.9% to 12% within 8 minutes of deploy",
+      "DB connection wait p99 jumped from 2 ms to 48 000 ms",
+      "inventory-service receiving 11\u00d7 its normal request volume",
+      "Kubernetes pod restarts on order-service every ~4 minutes (liveness probe)"
+    ],
+    "root_cause": "Each cart with N items now opens N concurrent DB connections in inventory-service (one per SELECT). An average cart has 8 items; peak traffic has 300 concurrent checkouts, yielding 2 400 simultaneous DB connections against a pool capped at 20. A missing connection.close() in the error path leaks connections that are never returned to the pool, accelerating exhaustion.",
+    "resolution": "Hotfix deployed: added finally: conn.close() in inventory_client.py. Batched all per-item lookups into a single SELECT ... WHERE id IN (...) query. Increased pool size to 50 as temporary buffer. Added Prometheus alert on pool utilization > 75%.",
+    "services_affected": [
+      "order-service",
+      "user-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-101"
+    ],
+    "oncall_engineer": "eve_thompson",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1001",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1067",
+    "title": "order-service DB connection pool exhausted \u2014 orders failing at 88% error rate",
+    "service": "order-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-18T18:00:00Z",
+    "resolved_at": "2024-09-08T00:25:00Z",
+    "duration_minutes": 110,
+    "symptoms": [
+      "Error log: 'QueuePool limit overflow, max_overflow 0 current overflow 20'",
+      "Order creation success rate fell from 99.9% to 12% within 8 minutes of deploy",
+      "DB connection wait p99 jumped from 2 ms to 48 000 ms",
+      "inventory-service receiving 11\u00d7 its normal request volume",
+      "Kubernetes pod restarts on order-service every ~4 minutes (liveness probe)"
+    ],
+    "root_cause": "Each cart with N items now opens N concurrent DB connections in inventory-service (one per SELECT). An average cart has 8 items; peak traffic has 300 concurrent checkouts, yielding 2 400 simultaneous DB connections against a pool capped at 20. A missing connection.close() in the error path leaks connections that are never returned to the pool, accelerating exhaustion.",
+    "resolution": "Hotfix deployed: added finally: conn.close() in inventory_client.py. Batched all per-item lookups into a single SELECT ... WHERE id IN (...) query. Increased pool size to 50 as temporary buffer. Added Prometheus alert on pool utilization > 75%.",
+    "services_affected": [
+      "order-service",
+      "user-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-101"
+    ],
+    "oncall_engineer": "alice_chen",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1001",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1068",
+    "title": "order-service DB CPU at 100% \u2014 N+1 query regression in order history",
+    "service": "order-service",
+    "severity": "SEV2",
+    "timestamp": "2025-02-02T13:00:00Z",
+    "resolved_at": "2024-10-03T18:20:00Z",
+    "duration_minutes": 91,
+    "symptoms": [
+      "Primary DB CPU jumped from 18% to 99% within 12 minutes of deploy",
+      "Slow query log: 80 000 individual SELECT on products table per minute",
+      "GET /orders/history p99 latency: 140 ms \u2192 9 200 ms",
+      "Read replica replication lag: 52 seconds behind primary",
+      "DB connection pool at 97% \u2014 downstream services starting to queue"
+    ],
+    "root_cause": "ProductService.get_by_id() is called once per order item in a Python for-loop, issuing one SELECT per call. A user with 20 orders \u00d7 6 items = 120 individual SELECTs per page load. At peak of 700 concurrent users loading order history: 84 000 queries/minute against a DB cluster tuned for 6 000 queries/minute. The test suite used a fixture with 1 order \u00d7 1 item, masking the N+1 completely.",
+    "resolution": "Hotfix: replaced loop with single SELECT ... WHERE id IN (all_item_ids) batch query. Deployed behind feature flag, validated 99.8% query reduction in staging. DB CPU back to 16% within 3 minutes of hotfix. Added query count assertion to integration test: assert mock_db.call_count == 1.",
+    "services_affected": [
+      "order-service",
+      "user-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-105"
+    ],
+    "oncall_engineer": "carol_kim",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1005",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1069",
+    "title": "order-service DB connection pool exhausted \u2014 orders failing at 88% error rate",
+    "service": "order-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-31T20:00:00Z",
+    "resolved_at": "2024-09-08T00:25:00Z",
+    "duration_minutes": 110,
+    "symptoms": [
+      "Error log: 'QueuePool limit overflow, max_overflow 0 current overflow 20'",
+      "Order creation success rate fell from 99.9% to 12% within 8 minutes of deploy",
+      "DB connection wait p99 jumped from 2 ms to 48 000 ms",
+      "inventory-service receiving 11\u00d7 its normal request volume",
+      "Kubernetes pod restarts on order-service every ~4 minutes (liveness probe)"
+    ],
+    "root_cause": "Each cart with N items now opens N concurrent DB connections in inventory-service (one per SELECT). An average cart has 8 items; peak traffic has 300 concurrent checkouts, yielding 2 400 simultaneous DB connections against a pool capped at 20. A missing connection.close() in the error path leaks connections that are never returned to the pool, accelerating exhaustion.",
+    "resolution": "Hotfix deployed: added finally: conn.close() in inventory_client.py. Batched all per-item lookups into a single SELECT ... WHERE id IN (...) query. Increased pool size to 50 as temporary buffer. Added Prometheus alert on pool utilization > 75%.",
+    "services_affected": [
+      "order-service",
+      "user-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-101"
+    ],
+    "oncall_engineer": "carol_kim",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1001",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1070",
+    "title": "checkout-service rate limiter throttling legitimate users \u2014 40% checkout failure rate",
+    "service": "checkout-service",
+    "severity": "SEV1",
+    "timestamp": "2025-02-22T13:00:00Z",
+    "resolved_at": "2024-09-02T23:22:00Z",
+    "duration_minutes": 20,
+    "symptoms": [
+      "HTTP 429 rate spiked from near-zero to 38% of all responses",
+      "Checkout funnel abandonment increased 4\u00d7 in real-time analytics",
+      "p99 latency on POST /checkout jumped from 320 ms to 5 200 ms",
+      "Support queue: 200+ tickets in 90 minutes about failed payments",
+      "order-service receiving 60% fewer order-created events than baseline"
+    ],
+    "root_cause": "The fixed-window counter was applied at the global service level rather than per user. All traffic shares a single counter that resets every 60 seconds. At 08:45 UTC normal morning traffic naturally exceeded 100 requests within the window, causing the counter to block ALL subsequent requests for the remainder of the minute, including legitimate checkouts.",
+    "resolution": "Rolled back rate_limiter.py to the previous sliding-window implementation. Temporarily set global limit to 10 000 req/min as blast radius control. Created follow-up ticket to implement true per-user Redis sorted-set rate limiting with a load test gate before merge.",
+    "services_affected": [
+      "checkout-service",
+      "payment-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-100"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1000",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1071",
+    "title": "order-service DB connection pool exhausted \u2014 orders failing at 88% error rate",
+    "service": "order-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-26T11:00:00Z",
+    "resolved_at": "2024-09-08T00:25:00Z",
+    "duration_minutes": 110,
+    "symptoms": [
+      "Error log: 'QueuePool limit overflow, max_overflow 0 current overflow 20'",
+      "Order creation success rate fell from 99.9% to 12% within 8 minutes of deploy",
+      "DB connection wait p99 jumped from 2 ms to 48 000 ms",
+      "inventory-service receiving 11\u00d7 its normal request volume",
+      "Kubernetes pod restarts on order-service every ~4 minutes (liveness probe)"
+    ],
+    "root_cause": "Each cart with N items now opens N concurrent DB connections in inventory-service (one per SELECT). An average cart has 8 items; peak traffic has 300 concurrent checkouts, yielding 2 400 simultaneous DB connections against a pool capped at 20. A missing connection.close() in the error path leaks connections that are never returned to the pool, accelerating exhaustion.",
+    "resolution": "Hotfix deployed: added finally: conn.close() in inventory_client.py. Batched all per-item lookups into a single SELECT ... WHERE id IN (...) query. Increased pool size to 50 as temporary buffer. Added Prometheus alert on pool utilization > 75%.",
+    "services_affected": [
+      "order-service",
+      "user-service",
+      "inventory-service"
+    ],
+    "related_prs": [
+      "PR-101"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1001",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1072",
+    "title": "auth-service OOM-killed every 4\u20136 hours \u2014 memory growing unbounded",
+    "service": "auth-service",
+    "severity": "SEV2",
+    "timestamp": "2025-01-26T05:00:00Z",
+    "resolved_at": "2024-09-14T06:44:00Z",
+    "duration_minutes": 108,
+    "symptoms": [
+      "Kubernetes events: 'OOMKilled' on all 3 auth-service replicas in rotation",
+      "Memory usage grows linearly from 280 MB baseline to ~2.1 GB before kill",
+      "Intermittent 5xx errors during pod restart window (45\u201390 s)",
+      "Token validation p99 latency spikes from 2 ms to 400 ms ahead of each OOM",
+      "Heap dump shows LRUCache holding 50 000 entries at ~42 KB each"
+    ],
+    "root_cause": "The PR description mis-estimated cache memory at ~50 MB. Actual decoded JWT objects include full user claims, roles, and metadata averaging 42 KB each, not 1 KB. At 50 000 entries the cache consumes 2.1 GB. Additionally, the cache was bounded by count not by memory, and no TTL was set, so entries only evict after 50 001 distinct tokens are seen \u2014 meaning active sessions are never evicted.",
+    "resolution": "Added 5-minute TTL to all cache entries. Reduced max-entries to 10 000. Added memory-based eviction threshold at 150 MB via cachetools MemoryCache. Added Grafana panel for cache memory and eviction rate. Auth-service memory now stable at 310\u2013340 MB.",
+    "services_affected": [
+      "auth-service",
+      "gateway-api"
+    ],
+    "related_prs": [
+      "PR-102"
+    ],
+    "oncall_engineer": "eve_thompson",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1002",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1073",
+    "title": "checkout-service serving stale prices \u2014 40% flash sale discount not applied",
+    "service": "checkout-service",
+    "severity": "SEV2",
+    "timestamp": "2025-02-07T17:00:00Z",
+    "resolved_at": "2024-09-25T10:22:00Z",
+    "duration_minutes": 25,
+    "symptoms": [
+      "47 customer support tickets in 2 hours: 'discount not showing at checkout'",
+      "Revenue analytics: 14% below forecast for past 4 hours",
+      "Flash sale price of $29.99 showing as $49.99 at checkout",
+      "Prices on product listing page differ from cart total",
+      "New A/B test pricing cohort not receiving test prices"
+    ],
+    "root_cause": "The cache invalidation webhook began silently failing 6 days ago after a service account token was rotated as part of a security audit. The webhook endpoint returned 401 on every price update, but there was no alerting on 4xx responses from this webhook. With a 24 h TTL and broken invalidation, all price changes were invisible to checkout-service for up to 24 hours. The 09:00 flash sale prices never propagated.",
+    "resolution": "Rotated webhook service account token. Manually flushed all price cache entries via cache admin API. Reverted TTL to 5 minutes as interim measure. Added Datadog monitor on webhook endpoint HTTP response codes (alert on any 4xx/5xx). Added cache invalidation lag metric \u2014 alert if any SKU price not refreshed in >10 min.",
+    "services_affected": [
+      "checkout-service",
+      "payment-service",
+      "order-service"
+    ],
+    "related_prs": [
+      "PR-104"
+    ],
+    "oncall_engineer": "dave_patel",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1004",
+    "scenario_id": null
+  },
+  {
+    "incident_id": "INC-1074",
+    "title": "payment-service Stripe webhook validation broken \u2014 orders stuck in payment_pending",
+    "service": "payment-service",
+    "severity": "SEV1",
+    "timestamp": "2025-01-26T23:00:00Z",
+    "resolved_at": "2024-10-15T21:36:00Z",
+    "duration_minutes": 105,
+    "symptoms": [
+      "Stripe dashboard: webhook delivery failure rate 100%, all returning HTTP 400",
+      "Order status stuck in 'payment_pending' for all orders since 14:32 UTC",
+      "Customers charged on Stripe but receiving no order confirmation",
+      "payment-service logs: 'SignatureVerificationError: No signatures found'",
+      "Support: 300+ tickets 'I was charged but my order disappeared'"
+    ],
+    "root_cause": "Stripe SDK v3.0.0 changed Webhook.construct_event() to require raw request bytes for HMAC verification. webhook_handler.py called request.json() (which parses then re-serializes the body) before passing to construct_event(). Re-serialization changes key ordering and whitespace, invalidating the HMAC. The 30-minute canary soak did not catch this because no Stripe webhooks were delivered to the canary instance during that window.",
+    "resolution": "Fix: changed request.json() to request.get_data(as_text=False) in webhook_handler.py. Replayed all failed webhook events from Stripe dashboard (Events API, last 6 hours). Manually reconciled 847 orders stuck in payment_pending. Added integration test using real raw bytes from Stripe test fixture, not reconstructed JSON.",
+    "services_affected": [
+      "payment-service",
+      "checkout-service",
+      "order-service",
+      "notification-service"
+    ],
+    "related_prs": [
+      "PR-107"
+    ],
+    "oncall_engineer": "eve_thompson",
+    "postmortem_url": "https://wiki.internal/postmortems/inc-1007",
+    "scenario_id": null
+  }
+]

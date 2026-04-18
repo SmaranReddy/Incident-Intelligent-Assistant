@@ -1,0 +1,24 @@
+{
+  "runbook_id": "RB-005",
+  "title": "payment-service Stripe Webhook Signature Validation Failures",
+  "service": "payment-service",
+  "issue_type": "webhook_validation_failure",
+  "last_updated": "2024-09-02T00:00:00Z",
+  "owner_team": "payment-eng",
+  "steps": [
+    "1. Confirm via Stripe dashboard: Developers \u2192 Webhooks \u2192 view recent events. Look for 4xx response codes.",
+    "2. Check payment-service logs: `kubectl logs -l app=payment-service | grep -i 'SignatureVerification\\|webhook\\|400'`",
+    "3. Verify webhook signing secret is correct: compare env var STRIPE_WEBHOOK_SECRET with Stripe dashboard value.",
+    "4. If secret mismatch: update Kubernetes secret: `kubectl create secret generic stripe-webhook-secret --from-literal=key=whsec_... --dry-run=client -o yaml | kubectl apply -f -`",
+    "5. If secret correct but still failing: check that raw request body is being passed to construct_event(), not parsed JSON.",
+    "6. Test with Stripe CLI: `stripe trigger payment_intent.succeeded` and watch logs.",
+    "7. Once fixed, replay missed events: use Stripe API to list events since incident start, replay each via POST /internal/webhook-replay.",
+    "8. Reconcile affected orders: query orders with status='payment_pending' and payment_intent_id matching replayed events.",
+    "9. Notify finance team of impacted transaction window for reconciliation."
+  ],
+  "escalation": "Page payment-service oncall. Notify finance for any reconciliation gaps. SEV1 if duration >15 min.",
+  "related_runbooks": [
+    "RB-006",
+    "RB-014"
+  ]
+}

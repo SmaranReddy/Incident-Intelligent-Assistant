@@ -1,0 +1,17 @@
+{
+  "pr_id": "PR-137",
+  "title": "fix: handle timezone-aware datetimes in gateway-api serialization",
+  "service": "gateway-api",
+  "summary": "Routine bugfix change for gateway-api. No functional behavior changes.",
+  "files_changed": [
+    "src/serializers/datetime_serializer.py"
+  ],
+  "author": "grace_okonkwo",
+  "reviewers": [
+    "carol_kim",
+    "eve_thompson"
+  ],
+  "merged_at": "2025-01-09T11:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

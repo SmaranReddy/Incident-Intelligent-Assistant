@@ -1,0 +1,26 @@
+{
+  "incident_id": "INC-1011",
+  "title": "inventory-service bulk import timing out for large catalogs",
+  "service": "inventory-service",
+  "severity": "SEV3",
+  "timestamp": "2024-12-04T05:37:00Z",
+  "resolved_at": "2024-12-04T06:25:00Z",
+  "duration_minutes": 48,
+  "symptoms": [
+    "POST /inventory/bulk-import timing out after 30 seconds for catalogs >5000 SKUs",
+    "Partial imports leaving inventory in inconsistent state",
+    "Merchants reporting missing SKUs after import"
+  ],
+  "root_cause": "Bulk import wrapped in single DB transaction. 5000 individual INSERTs in one transaction held table locks for 30+ seconds, triggering gateway timeout.",
+  "resolution": "Batched INSERTs into chunks of 500 within separate transactions. Import now runs in ~4 seconds for 5000 SKUs.",
+  "services_affected": [
+    "inventory-service",
+    "order-service"
+  ],
+  "related_prs": [
+    "PR-113"
+  ],
+  "oncall_engineer": "carol_kim",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1011",
+  "scenario_id": null
+}

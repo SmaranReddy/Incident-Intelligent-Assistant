@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0018",
+  "incident_id": "INC-1017",
+  "service": "gateway-api",
+  "channel": "#incidents-gateway-api",
+  "thread_start": "2025-01-03T20:18:00Z",
+  "thread_end": "2025-01-03T20:40:00Z",
+  "participants": [
+    "eve_thompson",
+    "iris_nakamura",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-01-03T20:18:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV3] gateway-api: error rate exceeding SLO."
+    },
+    {
+      "timestamp": "2025-01-03T20:23:00Z",
+      "author": "eve_thompson",
+      "text": "On it. Mobile app v4.2 users unable to reach any API endpoints on iOS. Checking recent changes."
+    },
+    {
+      "timestamp": "2025-01-03T20:26:00Z",
+      "author": "iris_nakamura",
+      "text": "There was a deploy 20 minutes ago. Checking diff."
+    },
+    {
+      "timestamp": "2025-01-03T20:29:00Z",
+      "author": "eve_thompson",
+      "text": "Root cause: New gateway CORS policy whitelisted specific Origin headers. Mobile app v4.2 sen.... Rolling back."
+    },
+    {
+      "timestamp": "2025-01-03T20:33:00Z",
+      "author": "iris_nakamura",
+      "text": "Rollback successful. Error rate normalizing."
+    },
+    {
+      "timestamp": "2025-01-03T20:36:00Z",
+      "author": "eve_thompson",
+      "text": "Incident closed. Postmortem scheduled for tomorrow."
+    }
+  ]
+}

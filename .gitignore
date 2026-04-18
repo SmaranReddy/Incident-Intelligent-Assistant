@@ -1,0 +1,105 @@
+# =========================
+# 🔐 ENV & SECRETS
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# 🐍 PYTHON
+# =========================
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Python build artifacts
+*.egg-info/
+.eggs/
+*.whl
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# =========================
+# 🌐 NODE / NEXT.JS
+# =========================
+node_modules/
+frontend/node_modules/
+.next/
+frontend/.next/
+out/
+.vercel/
+
+# =========================
+# 🐳 DOCKER
+# =========================
+docker-compose.override.yml
+*.tar
+
+# =========================
+# 🗄 DATABASE / VECTORS
+# =========================
+*.sqlite3
+*.db
+*.faiss
+*.index
+
+# =========================
+# 📊 DATA (CONTROLLED)
+# =========================
+# Ignore only heavy/generated data
+data/cache/
+data/temp/
+backend/data/chunks/
+# (Keep sample data in repo)
+# data/incidents/
+# data/slack/
+# data/structured_incidents/
+
+# =========================
+# 🧾 LOGS & RUNTIME
+# =========================
+*.log
+*.out
+*.err
+*.pid
+logs/
+
+# =========================
+# 💻 IDE / EDITOR
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# 🧠 AI / LOCAL TOOLING (IMPORTANT)
+# =========================
+.claude/
+CLAUDE.md
+.mcp.json
+.code-review-graph/
+
+# =========================
+# 🧹 SYSTEM FILES
+# =========================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# =========================
+# 📦 BUILD
+# =========================
+dist/
+build/
+
+# =========================
+# 📄 TYPESCRIPT
+# =========================
+*.tsbuildinfo

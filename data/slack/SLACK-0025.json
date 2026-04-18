@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0025",
+  "incident_id": "INC-1024",
+  "service": "payment-service",
+  "channel": "#incidents-payment-service",
+  "thread_start": "2025-01-02T16:58:00Z",
+  "thread_end": "2025-01-02T17:20:00Z",
+  "participants": [
+    "bob_martinez",
+    "henry_silva",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-01-02T16:58:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV1] payment-service: error rate exceeding SLO."
+    },
+    {
+      "timestamp": "2025-01-02T17:03:00Z",
+      "author": "bob_martinez",
+      "text": "On it. Stripe dashboard: webhook delivery failure rate 100%, all returning HTTP 400. Checking recent changes."
+    },
+    {
+      "timestamp": "2025-01-02T17:06:00Z",
+      "author": "henry_silva",
+      "text": "There was a deploy 20 minutes ago. Checking diff."
+    },
+    {
+      "timestamp": "2025-01-02T17:09:00Z",
+      "author": "bob_martinez",
+      "text": "Root cause: Stripe SDK v3.0.0 changed Webhook.construct_event() to require raw request bytes.... Rolling back."
+    },
+    {
+      "timestamp": "2025-01-02T17:13:00Z",
+      "author": "henry_silva",
+      "text": "Rollback successful. Error rate normalizing."
+    },
+    {
+      "timestamp": "2025-01-02T17:16:00Z",
+      "author": "bob_martinez",
+      "text": "Incident closed. Postmortem scheduled for tomorrow."
+    }
+  ]
+}

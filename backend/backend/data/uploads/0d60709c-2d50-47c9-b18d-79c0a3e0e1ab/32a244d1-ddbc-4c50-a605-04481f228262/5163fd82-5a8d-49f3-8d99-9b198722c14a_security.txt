@@ -1,0 +1,1 @@
+Security Policy: All laptops must use full-disk encryption. VPN is required when accessing corporate systems remotely. Passwords must be changed every 90 days.

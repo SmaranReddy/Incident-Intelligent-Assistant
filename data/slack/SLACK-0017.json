@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0017",
+  "incident_id": "INC-1016",
+  "service": "order-service",
+  "channel": "#incidents-order-service",
+  "thread_start": "2024-12-28T18:17:00Z",
+  "thread_end": "2024-12-28T18:39:00Z",
+  "participants": [
+    "dave_patel",
+    "jake_wilson",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-12-28T18:17:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV1] order-service: alert threshold breached."
+    },
+    {
+      "timestamp": "2024-12-28T18:21:00Z",
+      "author": "dave_patel",
+      "text": "Checking. Looks like Merchant A seeing order data from Merchant B in search results. Investigating."
+    },
+    {
+      "timestamp": "2024-12-28T18:24:00Z",
+      "author": "jake_wilson",
+      "text": "I see it too. Could be related to recent deploy."
+    },
+    {
+      "timestamp": "2024-12-28T18:27:00Z",
+      "author": "dave_patel",
+      "text": "Found the issue: New Elasticsearch query builder did not include tenant_id filter clause. Single-.... Deploying fix."
+    },
+    {
+      "timestamp": "2024-12-28T18:31:00Z",
+      "author": "jake_wilson",
+      "text": "Fix deployed. Metrics recovering."
+    },
+    {
+      "timestamp": "2024-12-28T18:34:00Z",
+      "author": "dave_patel",
+      "text": "Confirmed resolved. Writing up incident report."
+    }
+  ]
+}

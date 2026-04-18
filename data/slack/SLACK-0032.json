@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0032",
+  "incident_id": "INC-1031",
+  "service": "gateway-api",
+  "channel": "#incidents-gateway-api",
+  "thread_start": "2025-01-30T19:58:00Z",
+  "thread_end": "2025-01-30T20:20:00Z",
+  "participants": [
+    "bob_martinez",
+    "eve_thompson",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-01-30T19:58:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV2] gateway-api: alert threshold breached."
+    },
+    {
+      "timestamp": "2025-01-30T20:02:00Z",
+      "author": "bob_martinez",
+      "text": "Checking. Looks like All endpoint p99 latencies jumped to exactly 30 000 ms. Investigating."
+    },
+    {
+      "timestamp": "2025-01-30T20:05:00Z",
+      "author": "eve_thompson",
+      "text": "I see it too. Could be related to recent deploy."
+    },
+    {
+      "timestamp": "2025-01-30T20:08:00Z",
+      "author": "bob_martinez",
+      "text": "Found the issue: The NGINX config change placed proxy_read_timeout 30s in the http {} block inste.... Deploying fix."
+    },
+    {
+      "timestamp": "2025-01-30T20:12:00Z",
+      "author": "eve_thompson",
+      "text": "Fix deployed. Metrics recovering."
+    },
+    {
+      "timestamp": "2025-01-30T20:15:00Z",
+      "author": "bob_martinez",
+      "text": "Confirmed resolved. Writing up incident report."
+    }
+  ]
+}

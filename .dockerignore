@@ -1,0 +1,22 @@
+# Data & Indexes
+data/
+indexes/
+faiss_index/
+*.faiss
+*.pkl
+*.npy
+
+# Models
+models/
+*.bin
+*.pt
+
+# Cache
+.cache/
+
+# Env
+.env
+
+# Python junk
+__pycache__/
+*.pyc

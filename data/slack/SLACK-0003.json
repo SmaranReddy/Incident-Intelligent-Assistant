@@ -1,0 +1,76 @@
+{
+  "thread_id": "SLACK-0003",
+  "incident_id": "INC-1002",
+  "service": "auth-service",
+  "channel": "#incidents-auth-service",
+  "thread_start": "2024-09-14T04:54:00Z",
+  "thread_end": "2024-09-14T05:36:00Z",
+  "participants": [
+    "carol_kim",
+    "pagerduty-bot",
+    "frank_nguyen",
+    "iris_nakamura"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-09-14T04:54:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV2] auth-service: pod auth-service-7d9f8b-xkp2q OOMKilled. Third OOM in 18 hours."
+    },
+    {
+      "timestamp": "2024-09-14T04:58:00Z",
+      "author": "carol_kim",
+      "text": "Another OOM. Memory grows linearly then crashes. Not a traffic spike \u2014 traffic is flat. Something is accumulating."
+    },
+    {
+      "timestamp": "2024-09-14T05:00:00Z",
+      "author": "frank_nguyen",
+      "text": "Could be a connection leak? Auth-service makes a lot of outbound connections."
+    },
+    {
+      "timestamp": "2024-09-14T05:02:00Z",
+      "author": "carol_kim",
+      "text": "Checked connection count. Stable. It's heap memory growing. I'm pulling a heap dump from the next pod before it OOMs."
+    },
+    {
+      "timestamp": "2024-09-14T05:08:00Z",
+      "author": "iris_nakamura",
+      "text": "Got the heap dump. Analyzing with MAT... LRUCache is the biggest object. 50,000 entries. Each ~42 KB. That's 2.1 GB right there."
+    },
+    {
+      "timestamp": "2024-09-14T05:09:00Z",
+      "author": "carol_kim",
+      "text": "The JWT cache PR! Was merged 3 days ago. Been gradually filling up ever since. The PR said 50 MB estimate but it's clearly wrong."
+    },
+    {
+      "timestamp": "2024-09-14T05:10:00Z",
+      "author": "frank_nguyen",
+      "text": "Yeah the estimate assumed 1 KB per entry but a full JWT payload with roles is way larger. And there's no TTL so entries never leave."
+    },
+    {
+      "timestamp": "2024-09-14T05:11:00Z",
+      "author": "iris_nakamura",
+      "text": "With 50,000 daily active users each getting a new token, the cache fills up and then just sits there forever."
+    },
+    {
+      "timestamp": "2024-09-14T05:12:00Z",
+      "author": "carol_kim",
+      "text": "Immediate fix: add 5-minute TTL and cap memory at 150 MB. Deploying now."
+    },
+    {
+      "timestamp": "2024-09-14T05:15:00Z",
+      "author": "carol_kim",
+      "text": "Deployed. Memory stabilized at 315 MB. OOM-kill loop stopped."
+    },
+    {
+      "timestamp": "2024-09-14T05:18:00Z",
+      "author": "frank_nguyen",
+      "text": "We need better tooling for cache sizing estimates. The PR calculation was way off."
+    },
+    {
+      "timestamp": "2024-09-14T05:19:00Z",
+      "author": "iris_nakamura",
+      "text": "And a memory growth alert. If a pod grows by more than X MB/hour, we should know before it OOMs."
+    }
+  ]
+}

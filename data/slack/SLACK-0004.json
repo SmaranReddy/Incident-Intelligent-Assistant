@@ -1,0 +1,86 @@
+{
+  "thread_id": "SLACK-0004",
+  "incident_id": "INC-1003",
+  "service": "notification-service",
+  "channel": "#incidents-notification-service",
+  "thread_start": "2024-09-19T09:07:00Z",
+  "thread_end": "2024-09-19T09:49:00Z",
+  "participants": [
+    "carol_kim",
+    "pagerduty-bot",
+    "eve_thompson",
+    "iris_nakamura"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-09-19T09:07:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV1] notification-service: thread pool at 100%. CPU sustained at 98% for 10 minutes."
+    },
+    {
+      "timestamp": "2024-09-19T09:11:00Z",
+      "author": "carol_kim",
+      "text": "notification-service is thrashing. Checking what's filling the thread pool."
+    },
+    {
+      "timestamp": "2024-09-19T09:12:00Z",
+      "author": "eve_thompson",
+      "text": "All threads are in retry backoff loops. SendGrid is returning 503."
+    },
+    {
+      "timestamp": "2024-09-19T09:13:00Z",
+      "author": "carol_kim",
+      "text": "Is SendGrid having an outage? Checking their status page."
+    },
+    {
+      "timestamp": "2024-09-19T09:14:00Z",
+      "author": "iris_nakamura",
+      "text": "SendGrid status shows 'Investigating elevated error rates' as of 35 minutes ago. But why are we still hammering them?"
+    },
+    {
+      "timestamp": "2024-09-19T09:15:00Z",
+      "author": "carol_kim",
+      "text": "We should have backed off by now. Wait \u2014 was the circuit breaker removed last week?"
+    },
+    {
+      "timestamp": "2024-09-19T09:16:00Z",
+      "author": "eve_thompson",
+      "text": "...yes it was. PR #287. 'remove Hystrix circuit breaker'. Without it, we just retry infinitely."
+    },
+    {
+      "timestamp": "2024-09-19T09:17:00Z",
+      "author": "iris_nakamura",
+      "text": "And the retry backoff is per-thread in memory. So 2000 threads all in different phases of backoff = constant hammering. We're actually making SendGrid worse."
+    },
+    {
+      "timestamp": "2024-09-19T09:18:00Z",
+      "author": "carol_kim",
+      "text": "We need to stop the retries immediately. I'm deploying an emergency circuit breaker via env vars \u2014 CIRCUIT_BREAKER_ENABLED=true CIRCUIT_BREAKER_THRESHOLD=10."
+    },
+    {
+      "timestamp": "2024-09-19T09:21:00Z",
+      "author": "eve_thompson",
+      "text": "Thread pool clearing. CPU dropping. SendGrid calls stopped."
+    },
+    {
+      "timestamp": "2024-09-19T09:23:00Z",
+      "author": "iris_nakamura",
+      "text": "SendGrid recovered. We can start replaying the dead-letter queue, but slowly \u2014 100 msg/min max."
+    },
+    {
+      "timestamp": "2024-09-19T09:25:00Z",
+      "author": "carol_kim",
+      "text": "Replay started. Email backlog clearing. Incident contained."
+    },
+    {
+      "timestamp": "2024-09-19T09:34:00Z",
+      "author": "eve_thompson",
+      "text": "Lessons learned: removing resilience patterns needs more scrutiny. The Hystrix removal PR was merged without SRE review."
+    },
+    {
+      "timestamp": "2024-09-19T09:35:00Z",
+      "author": "carol_kim",
+      "text": "Adding SRE mandatory review to any PR touching resilience patterns. And circuit breaker as a required checklist item for external clients."
+    }
+  ]
+}

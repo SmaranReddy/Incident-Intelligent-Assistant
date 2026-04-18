@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-145",
+  "title": "chore: upgrade Python base image from 3.11 to 3.12 in auth-service",
+  "service": "auth-service",
+  "summary": "Routine infra change for auth-service. No functional behavior changes.",
+  "files_changed": [
+    "Dockerfile",
+    ".github/workflows/ci.yml"
+  ],
+  "author": "jake_wilson",
+  "reviewers": [
+    "jake_wilson",
+    "alice_chen"
+  ],
+  "merged_at": "2025-01-28T12:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": null
+}

@@ -1,0 +1,29 @@
+{
+  "incident_id": "INC-1008",
+  "title": "gateway-api global 30-second timeout regression \u2014 thread pool saturating",
+  "service": "gateway-api",
+  "severity": "SEV2",
+  "timestamp": "2024-10-18T12:55:00Z",
+  "resolved_at": "2024-10-18T13:19:00Z",
+  "duration_minutes": 24,
+  "symptoms": [
+    "All endpoint p99 latencies jumped to exactly 30 000 ms",
+    "Requests that previously failed fast at 3 s now hold threads for 30 s",
+    "DB connection pool exhausted as long-running queries held connections open",
+    "Kubernetes: gateway-api HPA scaling to max replicas (50) but not recovering",
+    "Error budget: 9% of monthly SLO budget consumed in 50 minutes"
+  ],
+  "root_cause": "The NGINX config change placed proxy_read_timeout 30s in the http {} block instead of inside the location /api/v2/recommendations {} block. This set the global read timeout for ALL upstream connections to 30 s. Slow upstream responses that would have been killed at 3 s now hold goroutine/thread resources for 30 s, cascading into resource exhaustion under normal traffic.",
+  "resolution": "Rolled back nginx.conf to previous configmap version via kubectl rollout undo. Traffic recovered in 90 seconds. Applied corrected config with timeout scoped inside the specific location block. Added required nginx-config-review step to gateway PR template. Mandatory staging soak of 15 min for any gateway change.",
+  "services_affected": [
+    "gateway-api",
+    "auth-service",
+    "user-service"
+  ],
+  "related_prs": [
+    "PR-108"
+  ],
+  "oncall_engineer": "dave_patel",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1008",
+  "scenario_id": "nginx_timeout_config_drift"
+}

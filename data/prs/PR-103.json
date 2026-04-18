@@ -1,0 +1,20 @@
+{
+  "pr_id": "PR-103",
+  "title": "refactor: remove deprecated Hystrix circuit breaker from notification pipeline",
+  "service": "notification-service",
+  "summary": "Hystrix is EOL and flagged by our dependency scanner. Removing it from the notification dispatcher as part of the Hystrix deprecation project. Notification delivery is best-effort so circuit breaking was considered unnecessary overhead. Resilience4j migration tracked in NOTIF-412.",
+  "files_changed": [
+    "src/pipeline/notification_dispatcher.py",
+    "src/resilience/circuit_breaker.py",
+    "config/notification_config.yaml",
+    "requirements.txt"
+  ],
+  "author": "bob_martinez",
+  "reviewers": [
+    "dave_patel",
+    "liam_foster"
+  ],
+  "merged_at": "2024-09-16T09:00:00Z",
+  "risk_level": "high",
+  "scenario_id": "circuit_breaker_removed"
+}

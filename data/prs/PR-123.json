@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-123",
+  "title": "chore: update checkout-service dependencies to latest patch versions",
+  "service": "checkout-service",
+  "summary": "Routine dependency-update change for checkout-service. No functional behavior changes.",
+  "files_changed": [
+    "requirements.txt",
+    "package.json"
+  ],
+  "author": "carol_kim",
+  "reviewers": [
+    "henry_silva",
+    "alice_chen"
+  ],
+  "merged_at": "2024-12-05T15:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

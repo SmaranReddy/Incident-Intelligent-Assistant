@@ -1,0 +1,29 @@
+{
+  "incident_id": "INC-1036",
+  "title": "notification-service retry storm overloading SendGrid \u2014 cascading to payment receipts",
+  "service": "notification-service",
+  "severity": "SEV1",
+  "timestamp": "2025-01-03T13:00:00Z",
+  "resolved_at": "2024-09-19T10:24:00Z",
+  "duration_minutes": 75,
+  "symptoms": [
+    "SendGrid API returning 503 with message 'too many requests from single source'",
+    "notification-service thread pool at 100% \u2014 2 000 threads all in retry backoff",
+    "Retry queue depth growing at 45 000 messages/minute",
+    "payment-service: order confirmation emails not delivered for 55 minutes",
+    "auth-service: password reset emails silently dropped",
+    "CPU on notification-service sustained at 98% for 60 minutes"
+  ],
+  "root_cause": "SendGrid had a 20-minute partial outage. Without circuit breaking, all 2 000 worker threads continued attempting delivery. Exponential backoff state is in-memory per-thread and does not coordinate across threads, so the aggregate retry rate actually increased over time. By the time SendGrid recovered, our retry storm was generating 80 000 req/min against their API, triggering their global rate limiter and extending the incident by 35 minutes.",
+  "resolution": "Deployed emergency env-var-configured circuit breaker (open after 10 failures in 30 s). Drained retry queue via dead-letter queue replay with rate limiting. Coordinated with SendGrid support to whitelist our IPs temporarily. Added circuit breaker as required field in PR template for any external HTTP client.",
+  "services_affected": [
+    "notification-service",
+    "order-service"
+  ],
+  "related_prs": [
+    "PR-103"
+  ],
+  "oncall_engineer": "dave_patel",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1003",
+  "scenario_id": null
+}

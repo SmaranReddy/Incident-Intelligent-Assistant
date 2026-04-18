@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0039",
+  "incident_id": "INC-1038",
+  "service": "checkout-service",
+  "channel": "#incidents-checkout-service",
+  "thread_start": "2025-01-12T12:58:00Z",
+  "thread_end": "2025-01-12T13:20:00Z",
+  "participants": [
+    "dave_patel",
+    "jake_wilson",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-01-12T12:58:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV1] checkout-service: alert threshold breached."
+    },
+    {
+      "timestamp": "2025-01-12T13:02:00Z",
+      "author": "dave_patel",
+      "text": "Checking. Looks like HTTP 429 rate spiked from near-zero to 38% of all responses. Investigating."
+    },
+    {
+      "timestamp": "2025-01-12T13:05:00Z",
+      "author": "jake_wilson",
+      "text": "I see it too. Could be related to recent deploy."
+    },
+    {
+      "timestamp": "2025-01-12T13:08:00Z",
+      "author": "dave_patel",
+      "text": "Found the issue: The fixed-window counter was applied at the global service level rather than per.... Deploying fix."
+    },
+    {
+      "timestamp": "2025-01-12T13:12:00Z",
+      "author": "jake_wilson",
+      "text": "Fix deployed. Metrics recovering."
+    },
+    {
+      "timestamp": "2025-01-12T13:15:00Z",
+      "author": "dave_patel",
+      "text": "Confirmed resolved. Writing up incident report."
+    }
+  ]
+}

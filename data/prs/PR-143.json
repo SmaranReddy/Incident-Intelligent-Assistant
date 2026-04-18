@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-143",
+  "title": "fix: handle empty response body in payment-service API client",
+  "service": "payment-service",
+  "summary": "Routine bugfix change for payment-service. No functional behavior changes.",
+  "files_changed": [
+    "src/clients/api_client.py",
+    "tests/test_api_client.py"
+  ],
+  "author": "jake_wilson",
+  "reviewers": [
+    "henry_silva",
+    "iris_nakamura"
+  ],
+  "merged_at": "2025-01-24T09:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

@@ -1,0 +1,29 @@
+{
+  "incident_id": "INC-1063",
+  "title": "checkout-service rate limiter throttling legitimate users \u2014 40% checkout failure rate",
+  "service": "checkout-service",
+  "severity": "SEV1",
+  "timestamp": "2025-02-27T09:00:00Z",
+  "resolved_at": "2024-09-02T23:22:00Z",
+  "duration_minutes": 20,
+  "symptoms": [
+    "HTTP 429 rate spiked from near-zero to 38% of all responses",
+    "Checkout funnel abandonment increased 4\u00d7 in real-time analytics",
+    "p99 latency on POST /checkout jumped from 320 ms to 5 200 ms",
+    "Support queue: 200+ tickets in 90 minutes about failed payments",
+    "order-service receiving 60% fewer order-created events than baseline"
+  ],
+  "root_cause": "The fixed-window counter was applied at the global service level rather than per user. All traffic shares a single counter that resets every 60 seconds. At 08:45 UTC normal morning traffic naturally exceeded 100 requests within the window, causing the counter to block ALL subsequent requests for the remainder of the minute, including legitimate checkouts.",
+  "resolution": "Rolled back rate_limiter.py to the previous sliding-window implementation. Temporarily set global limit to 10 000 req/min as blast radius control. Created follow-up ticket to implement true per-user Redis sorted-set rate limiting with a load test gate before merge.",
+  "services_affected": [
+    "checkout-service",
+    "payment-service",
+    "inventory-service"
+  ],
+  "related_prs": [
+    "PR-100"
+  ],
+  "oncall_engineer": "eve_thompson",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1000",
+  "scenario_id": null
+}

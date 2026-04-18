@@ -1,0 +1,26 @@
+{
+  "incident_id": "INC-1009",
+  "service": "payment-service",
+  "symptoms": [
+    "MySQL: 'Deadlock found when trying to get lock; try restarting transaction'",
+    "POST /payments error rate: 0.1% → 23% within 6 minutes of deploy",
+    "p99 payment latency: 45 ms → 14 000 ms",
+    "Retry storms from iOS/Android clients amplifying deadlock contention",
+    "Slow query log: SELECT FOR UPDATE on idempotency_keys holding locks >8 s"
+  ],
+  "hypotheses_tested": [
+    "Multiple transactions are locking each other",
+    "Classic AB/BA deadlock due to idempotency_keys and payment_transactions locks",
+    "Lock held for the duration of the Stripe API call"
+  ],
+  "failed_attempts": [
+    "Adding innodb_lock_wait_timeout=2 — failed to resolve, only failed faster"
+  ],
+  "confirmed_root_cause": "The idempotency lock (SELECT FOR UPDATE on idempotency_keys) is held while waiting for Stripe's response, which takes 2–8 s, creating a classic AB/BA deadlock with mobile client retries",
+  "resolution_action": "Replaced SELECT FOR UPDATE with INSERT ... ON DUPLICATE KEY UPDATE (optimistic lock), moved Stripe API call outside the transaction boundary, added innodb_lock_wait_timeout=2, and added client-side retry jitter (100–500 ms random backoff) in mobile SDK",
+  "services_affected": [
+    "payment-service",
+    "checkout-service"
+  ],
+  "confidence": 0.98
+}

@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-146",
+  "title": "chore: upgrade Python base image from 3.11 to 3.12 in inventory-service",
+  "service": "inventory-service",
+  "summary": "Routine infra change for inventory-service. No functional behavior changes.",
+  "files_changed": [
+    "Dockerfile",
+    ".github/workflows/ci.yml"
+  ],
+  "author": "dave_patel",
+  "reviewers": [
+    "kate_brennan",
+    "frank_nguyen"
+  ],
+  "merged_at": "2025-01-29T13:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": null
+}

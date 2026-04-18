@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0012",
+  "incident_id": "INC-1011",
+  "service": "inventory-service",
+  "channel": "#incidents-inventory-service",
+  "thread_start": "2024-12-04T05:35:00Z",
+  "thread_end": "2024-12-04T05:57:00Z",
+  "participants": [
+    "carol_kim",
+    "kate_brennan",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-12-04T05:35:00Z",
+      "author": "pagerduty-bot",
+      "text": "\ud83d\udd34 [SEV3] inventory-service: error rate exceeding SLO."
+    },
+    {
+      "timestamp": "2024-12-04T05:40:00Z",
+      "author": "carol_kim",
+      "text": "On it. POST /inventory/bulk-import timing out after 30 seconds for catalogs >5000 SKUs. Checking recent changes."
+    },
+    {
+      "timestamp": "2024-12-04T05:43:00Z",
+      "author": "kate_brennan",
+      "text": "There was a deploy 20 minutes ago. Checking diff."
+    },
+    {
+      "timestamp": "2024-12-04T05:46:00Z",
+      "author": "carol_kim",
+      "text": "Root cause: Bulk import wrapped in single DB transaction. 5000 individual INSERTs in one tra.... Rolling back."
+    },
+    {
+      "timestamp": "2024-12-04T05:50:00Z",
+      "author": "kate_brennan",
+      "text": "Rollback successful. Error rate normalizing."
+    },
+    {
+      "timestamp": "2024-12-04T05:53:00Z",
+      "author": "carol_kim",
+      "text": "Incident closed. Postmortem scheduled for tomorrow."
+    }
+  ]
+}

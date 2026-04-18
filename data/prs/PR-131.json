@@ -1,0 +1,17 @@
+{
+  "pr_id": "PR-131",
+  "title": "fix: correct typo in notification-service API documentation",
+  "service": "notification-service",
+  "summary": "Routine docs change for notification-service. No functional behavior changes.",
+  "files_changed": [
+    "docs/api_reference.md"
+  ],
+  "author": "alice_chen",
+  "reviewers": [
+    "bob_martinez",
+    "kate_brennan"
+  ],
+  "merged_at": "2024-12-26T12:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

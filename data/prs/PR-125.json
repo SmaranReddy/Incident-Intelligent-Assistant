@@ -1,0 +1,17 @@
+{
+  "pr_id": "PR-125",
+  "title": "test: add unit tests for inventory-service input validation layer",
+  "service": "inventory-service",
+  "summary": "Routine test change for inventory-service. No functional behavior changes.",
+  "files_changed": [
+    "tests/test_validation.py"
+  ],
+  "author": "iris_nakamura",
+  "reviewers": [
+    "iris_nakamura",
+    "alice_chen"
+  ],
+  "merged_at": "2024-12-10T11:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

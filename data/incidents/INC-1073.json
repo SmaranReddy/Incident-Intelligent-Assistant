@@ -1,0 +1,29 @@
+{
+  "incident_id": "INC-1073",
+  "title": "checkout-service serving stale prices \u2014 40% flash sale discount not applied",
+  "service": "checkout-service",
+  "severity": "SEV2",
+  "timestamp": "2025-02-07T17:00:00Z",
+  "resolved_at": "2024-09-25T10:22:00Z",
+  "duration_minutes": 25,
+  "symptoms": [
+    "47 customer support tickets in 2 hours: 'discount not showing at checkout'",
+    "Revenue analytics: 14% below forecast for past 4 hours",
+    "Flash sale price of $29.99 showing as $49.99 at checkout",
+    "Prices on product listing page differ from cart total",
+    "New A/B test pricing cohort not receiving test prices"
+  ],
+  "root_cause": "The cache invalidation webhook began silently failing 6 days ago after a service account token was rotated as part of a security audit. The webhook endpoint returned 401 on every price update, but there was no alerting on 4xx responses from this webhook. With a 24 h TTL and broken invalidation, all price changes were invisible to checkout-service for up to 24 hours. The 09:00 flash sale prices never propagated.",
+  "resolution": "Rotated webhook service account token. Manually flushed all price cache entries via cache admin API. Reverted TTL to 5 minutes as interim measure. Added Datadog monitor on webhook endpoint HTTP response codes (alert on any 4xx/5xx). Added cache invalidation lag metric \u2014 alert if any SKU price not refreshed in >10 min.",
+  "services_affected": [
+    "checkout-service",
+    "payment-service",
+    "order-service"
+  ],
+  "related_prs": [
+    "PR-104"
+  ],
+  "oncall_engineer": "dave_patel",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1004",
+  "scenario_id": null
+}

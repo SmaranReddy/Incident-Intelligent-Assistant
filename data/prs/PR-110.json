@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-110",
+  "title": "chore: update user-service dependencies to latest patch versions",
+  "service": "user-service",
+  "summary": "Routine dependency-update change for user-service. No functional behavior changes.",
+  "files_changed": [
+    "requirements.txt",
+    "package.json"
+  ],
+  "author": "iris_nakamura",
+  "reviewers": [
+    "eve_thompson",
+    "kate_brennan"
+  ],
+  "merged_at": "2024-10-28T10:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

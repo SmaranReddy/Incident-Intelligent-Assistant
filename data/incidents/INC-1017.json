@@ -1,0 +1,27 @@
+{
+  "incident_id": "INC-1017",
+  "title": "gateway-api CORS preflight failing for new mobile API version",
+  "service": "gateway-api",
+  "severity": "SEV3",
+  "timestamp": "2025-01-03T20:20:00Z",
+  "resolved_at": "2025-01-03T21:34:00Z",
+  "duration_minutes": 74,
+  "symptoms": [
+    "Mobile app v4.2 users unable to reach any API endpoints on iOS",
+    "Browser console: 'CORS policy: No Access-Control-Allow-Origin header'",
+    "Affects only requests from app version sending X-App-Version: 4.2"
+  ],
+  "root_cause": "New gateway CORS policy whitelisted specific Origin headers. Mobile app v4.2 sends a new custom header X-App-Version not in the allowed headers list, causing preflight to fail.",
+  "resolution": "Added X-App-Version to Access-Control-Allow-Headers in gateway CORS config. Mobile traffic restored immediately.",
+  "services_affected": [
+    "gateway-api",
+    "inventory-service",
+    "auth-service"
+  ],
+  "related_prs": [
+    "PR-134"
+  ],
+  "oncall_engineer": "eve_thompson",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1017",
+  "scenario_id": null
+}

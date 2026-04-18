@@ -1,0 +1,20 @@
+{
+  "pr_id": "PR-101",
+  "title": "feat: add synchronous inventory availability checks during order placement",
+  "service": "order-service",
+  "summary": "Calls inventory-service for each line item synchronously before confirming an order to prevent overselling. Previously the check was async and best-effort. Each cart item now triggers one DB lookup in inventory-service. Connection pool size unchanged at 20.",
+  "files_changed": [
+    "src/services/order_validator.py",
+    "src/clients/inventory_client.py",
+    "config/database.yaml",
+    "tests/test_order_validator.py"
+  ],
+  "author": "carol_kim",
+  "reviewers": [
+    "liam_foster",
+    "bob_martinez"
+  ],
+  "merged_at": "2024-09-05T12:00:00Z",
+  "risk_level": "high",
+  "scenario_id": "connection_pool_exhaustion"
+}

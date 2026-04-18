@@ -1,0 +1,20 @@
+{
+  "pr_id": "PR-107",
+  "title": "chore: upgrade Stripe SDK from v2.1.3 to v3.0.0",
+  "service": "payment-service",
+  "summary": "v3.x required for BNPL and crypto payment methods on Q4 roadmap. Breaking changes in CHANGELOG: error class hierarchy changed, webhook signature verification API updated. All 47 tests passing. Staged deployment to payment-service-canary confirmed no errors in 30-minute soak.",
+  "files_changed": [
+    "requirements.txt",
+    "src/payments/stripe_client.py",
+    "src/payments/webhook_handler.py",
+    "tests/test_payments.py"
+  ],
+  "author": "carol_kim",
+  "reviewers": [
+    "dave_patel",
+    "frank_nguyen"
+  ],
+  "merged_at": "2024-10-13T13:00:00Z",
+  "risk_level": "high",
+  "scenario_id": "sdk_major_version_upgrade"
+}

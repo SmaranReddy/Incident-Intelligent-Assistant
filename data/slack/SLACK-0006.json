@@ -1,0 +1,81 @@
+{
+  "thread_id": "SLACK-0006",
+  "incident_id": "INC-1005",
+  "service": "order-service",
+  "channel": "#incidents-order-service",
+  "thread_start": "2024-10-03T16:47:00Z",
+  "thread_end": "2024-10-03T17:29:00Z",
+  "participants": [
+    "pagerduty-bot",
+    "henry_silva",
+    "grace_okonkwo",
+    "bob_martinez"
+  ],
+  "messages": [
+    {
+      "timestamp": "2024-10-03T16:47:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV2] order-service: DB CPU at 99%. Slow query log flooded."
+    },
+    {
+      "timestamp": "2024-10-03T16:50:00Z",
+      "author": "bob_martinez",
+      "text": "DB is on fire. Checking slow query log... thousands of 'SELECT * FROM products WHERE id = ?' queries. All from order-service."
+    },
+    {
+      "timestamp": "2024-10-03T16:52:00Z",
+      "author": "henry_silva",
+      "text": "Was there a recent deploy? Checking deployment history... order-service deployed 14 minutes ago. 'order history enrichment' feature."
+    },
+    {
+      "timestamp": "2024-10-03T16:53:00Z",
+      "author": "bob_martinez",
+      "text": "Let me look at order_history.py... ProductService.get_by_id() called in a loop for each item in each order. Classic N+1."
+    },
+    {
+      "timestamp": "2024-10-03T16:54:00Z",
+      "author": "grace_okonkwo",
+      "text": "A user with 20 orders \u00d7 6 items per order = 120 SELECTs just to load their order history page. And we have 700 concurrent users."
+    },
+    {
+      "timestamp": "2024-10-03T16:55:00Z",
+      "author": "bob_martinez",
+      "text": "700 \u00d7 120 = 84,000 queries/minute. Our DB handles 6,000. We're 14\u00d7 over capacity."
+    },
+    {
+      "timestamp": "2024-10-03T16:56:00Z",
+      "author": "henry_silva",
+      "text": "Can we feature-flag this off while we fix it?"
+    },
+    {
+      "timestamp": "2024-10-03T16:57:00Z",
+      "author": "bob_martinez",
+      "text": "No feature flag in place. I'm reverting the deploy. ETA 3 minutes."
+    },
+    {
+      "timestamp": "2024-10-03T17:00:00Z",
+      "author": "grace_okonkwo",
+      "text": "Revert deployed. DB CPU dropping. 45%... 28%... back to 17%. Read replica catching up."
+    },
+    {
+      "timestamp": "2024-10-03T17:02:00Z",
+      "author": "bob_martinez",
+      "text": "Good. Now let's fix the query properly. We need a single batch query: SELECT * FROM products WHERE id IN (all_item_ids_in_all_orders)."
+    },
+    {
+      "timestamp": "2024-10-03T17:19:00Z",
+      "author": "henry_silva",
+      "text": "Fix implemented and tested. Reducing 120 queries to 1 per page load. Deploying with query count assertion in the test."
+    },
+    {
+      "timestamp": "2024-10-03T17:21:00Z",
+      "author": "bob_martinez",
+      "text": "Fix deployed. Order history p99 back to 130ms. DB CPU at 16%. All good."
+    },
+    {
+      "timestamp": "2024-10-03T17:24:00Z",
+      "author": "grace_okonkwo",
+      "text": "We need to add query count assertions to any endpoint touching ORM loops. This is the third N+1 this quarter."
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-153",
+  "title": "feat: add Prometheus metrics endpoint to notification-service",
+  "service": "notification-service",
+  "summary": "Routine observability change for notification-service. No functional behavior changes.",
+  "files_changed": [
+    "src/metrics/prometheus.py",
+    "src/server.py"
+  ],
+  "author": "dave_patel",
+  "reviewers": [
+    "kate_brennan",
+    "liam_foster"
+  ],
+  "merged_at": "2025-02-14T14:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

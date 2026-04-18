@@ -1,0 +1,20 @@
+{
+  "pr_id": "PR-109",
+  "title": "feat: add idempotency key support to payment API to prevent duplicate charges",
+  "service": "payment-service",
+  "summary": "Mobile clients retry payment requests on network failure, causing duplicate charges. Implementing idempotency keys via DB row lock on idempotency_keys table. Lock is held for the duration of the Stripe API call to ensure exactly-once semantics. Includes DB migration adding the idempotency_keys table.",
+  "files_changed": [
+    "src/payments/idempotency.py",
+    "db/migrations/0042_add_idempotency_keys_table.sql",
+    "src/api/payment_endpoints.py",
+    "tests/test_idempotency.py"
+  ],
+  "author": "alice_chen",
+  "reviewers": [
+    "liam_foster",
+    "henry_silva"
+  ],
+  "merged_at": "2024-10-21T13:00:00Z",
+  "risk_level": "high",
+  "scenario_id": "idempotency_deadlock"
+}

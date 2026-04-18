@@ -1,0 +1,20 @@
+{
+  "pr_id": "PR-102",
+  "title": "perf: cache decoded JWT payloads to reduce redundant CPU overhead",
+  "service": "auth-service",
+  "summary": "JWT decode was identified as 15% of auth-service CPU in profiling. Adding an in-process LRU cache keyed by token signature. Max entries: 50 000. No TTL set \u2014 tokens carry their own exp claim. Memory impact estimated at ~50 MB at full cache capacity per calculation in PR description.",
+  "files_changed": [
+    "src/auth/jwt_validator.py",
+    "src/auth/token_cache.py",
+    "config/auth_config.yaml",
+    "tests/test_jwt_validator.py"
+  ],
+  "author": "bob_martinez",
+  "reviewers": [
+    "jake_wilson",
+    "grace_okonkwo"
+  ],
+  "merged_at": "2024-09-13T17:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": "memory_leak_jwt_cache"
+}

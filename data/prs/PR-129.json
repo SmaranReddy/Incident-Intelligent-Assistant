@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-129",
+  "title": "refactor: extract notification-service config loader into separate module",
+  "service": "notification-service",
+  "summary": "Routine refactor change for notification-service. No functional behavior changes.",
+  "files_changed": [
+    "src/config/loader.py",
+    "src/config/__init__.py"
+  ],
+  "author": "grace_okonkwo",
+  "reviewers": [
+    "kate_brennan",
+    "liam_foster"
+  ],
+  "merged_at": "2024-12-20T13:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": null
+}

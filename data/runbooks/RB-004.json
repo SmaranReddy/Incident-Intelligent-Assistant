@@ -1,0 +1,24 @@
+{
+  "runbook_id": "RB-004",
+  "title": "auth-service TLS Certificate Expired or Expiring",
+  "service": "auth-service",
+  "issue_type": "tls_certificate_expiry",
+  "last_updated": "2024-09-22T00:00:00Z",
+  "owner_team": "auth-eng",
+  "steps": [
+    "1. Confirm cert issue: `kubectl describe cert auth-service-tls | grep -A10 'Status'`",
+    "2. Check expiry: `openssl s_client -connect auth-service:443 2>/dev/null | openssl x509 -noout -dates`",
+    "3. Check cert-manager logs: `kubectl logs -n cert-manager deploy/cert-manager | grep auth-service-tls`",
+    "4. If cert expired and cert-manager not renewing: check renewBefore window vs remaining validity.",
+    "5. Force manual renewal: `kubectl annotate cert auth-service-tls cert-manager.io/issueAsCertificateRequest=$(date +%s)`",
+    "6. Wait for cert issuance (typically 60\u2013120 seconds). Monitor: `kubectl get cert auth-service-tls -w`",
+    "7. Verify new cert propagated to all pods: check READY column shows True.",
+    "8. Test mTLS: `grpcurl -insecure auth-service:443 grpc.health.v1.Health/Check`",
+    "9. If cert-manager ACME challenge failing: check DNS records and verify challenge solver config.",
+    "10. After resolution: audit ALL managed certs for any in the 7\u201330 day renewal window gap."
+  ],
+  "escalation": "Cert expiry = SEV1 (complete auth failure). Page incident commander immediately. Notify #security.",
+  "related_runbooks": [
+    "RB-003"
+  ]
+}

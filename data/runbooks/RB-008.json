@@ -1,0 +1,23 @@
+{
+  "runbook_id": "RB-008",
+  "title": "checkout-service Serving Stale or Incorrect Prices",
+  "service": "checkout-service",
+  "issue_type": "stale_price_cache",
+  "last_updated": "2024-09-26T00:00:00Z",
+  "owner_team": "checkout-eng",
+  "steps": [
+    "1. Confirm stale data: compare price in checkout-service response vs pricing-service API for same SKU.",
+    "2. Check cache invalidation webhook health: `kubectl logs -l app=checkout-service | grep price_update_webhook`",
+    "3. If webhook returning 4xx: check service account token expiry. Token likely rotated without updating webhook config.",
+    "4. Fix token: `kubectl create secret generic pricing-webhook-token --from-literal=token=<new_token> --dry-run=client -o yaml | kubectl apply -f -`",
+    "5. Restart checkout-service to pick up new token.",
+    "6. Flush price cache for all affected SKUs: `curl -X POST http://checkout-service/admin/cache/flush/prices`",
+    "7. Verify prices now correct: spot-check 10 SKUs against pricing-service.",
+    "8. If TTL is >5 minutes: revert to 5-minute TTL as a safety measure until invalidation is verified.",
+    "9. Add monitoring: webhook endpoint health check with alert on any 4xx/5xx responses."
+  ],
+  "escalation": "Page checkout-service oncall. Notify finance and marketing of impacted pricing window. Check if active promotions are affected.",
+  "related_runbooks": [
+    "RB-001"
+  ]
+}

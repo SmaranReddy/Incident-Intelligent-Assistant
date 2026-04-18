@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-134",
+  "title": "refactor: extract gateway-api config loader into separate module",
+  "service": "gateway-api",
+  "summary": "Routine refactor change for gateway-api. No functional behavior changes.",
+  "files_changed": [
+    "src/config/loader.py",
+    "src/config/__init__.py"
+  ],
+  "author": "dave_patel",
+  "reviewers": [
+    "bob_martinez",
+    "liam_foster"
+  ],
+  "merged_at": "2025-01-02T15:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": null
+}

@@ -1,0 +1,64 @@
+# Core API
+fastapi
+uvicorn[standard]
+
+# Data validation
+pydantic[email]
+pydantic-settings
+
+# Vector Search
+faiss-cpu
+
+# Embeddings
+sentence-transformers
+
+# BM25
+rank-bm25
+
+# ML utilities (TF-IDF reranking)
+scikit-learn
+
+# HTTP requests
+httpx
+
+# Environment variables
+python-dotenv
+
+# LLM (Groq)
+groq
+
+# Utilities
+numpy
+tqdm
+tiktoken
+cachetools
+
+# Database (async SQLite for dev, switch DATABASE_URL to postgresql+asyncpg for prod)
+sqlalchemy[asyncio]
+aiosqlite
+
+# Auth
+python-jose[cryptography]
+bcrypt
+
+# File uploads
+python-multipart
+
+# Structured logging
+structlog
+
+# Metrics
+prometheus-fastapi-instrumentator
+prometheus-client
+
+# Rate limiting
+slowapi
+
+# Document parsing
+pymupdf
+python-docx
+
+# Testing
+pytest
+pytest-asyncio
+httpx

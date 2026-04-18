@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0019",
+  "incident_id": "INC-1018",
+  "service": "user-service",
+  "channel": "#incidents-user-service",
+  "thread_start": "2025-01-09T05:40:00Z",
+  "thread_end": "2025-01-09T06:02:00Z",
+  "participants": [
+    "carol_kim",
+    "iris_nakamura",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-01-09T05:40:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV3] user-service: alert threshold breached."
+    },
+    {
+      "timestamp": "2025-01-09T05:44:00Z",
+      "author": "carol_kim",
+      "text": "Checking. Looks like Users clicking password reset links within 5 minutes receiving 'token expired'. Investigating."
+    },
+    {
+      "timestamp": "2025-01-09T05:47:00Z",
+      "author": "iris_nakamura",
+      "text": "I see it too. Could be related to recent deploy."
+    },
+    {
+      "timestamp": "2025-01-09T05:50:00Z",
+      "author": "carol_kim",
+      "text": "Found the issue: Token expiry calculation used datetime.utcnow() but Redis TTL was set using loca.... Deploying fix."
+    },
+    {
+      "timestamp": "2025-01-09T05:54:00Z",
+      "author": "iris_nakamura",
+      "text": "Fix deployed. Metrics recovering."
+    },
+    {
+      "timestamp": "2025-01-09T05:57:00Z",
+      "author": "carol_kim",
+      "text": "Confirmed resolved. Writing up incident report."
+    }
+  ]
+}

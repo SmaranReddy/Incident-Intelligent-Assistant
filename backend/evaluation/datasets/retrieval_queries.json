@@ -1,0 +1,14 @@
+[
+  {
+    "query": "What is engineering culture at GitLab?",
+    "relevant_chunk_ids": ["chunk_0"]
+  },
+  {
+    "query": "How is engineering excellence defined?",
+    "relevant_chunk_ids": ["chunk_1"]
+  },
+  {
+    "query": "How is engineering time split between product and initiatives?",
+    "relevant_chunk_ids": ["chunk_2"]
+  }
+]

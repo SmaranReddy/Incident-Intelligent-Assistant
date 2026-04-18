@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Enterprise Knowledge</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 14px 24px;
+      border-bottom: 1px solid #1e2535;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #0f1117;
+      flex-shrink: 0;
+    }
+    header .logo {
+      width: 32px; height: 32px;
+      background: #4f46e5;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    header h1 { font-size: 15px; font-weight: 600; color: #f1f5f9; }
+    header span { font-size: 12px; color: #475569; margin-left: 2px; }
+
+    /* ── Chat area ── */
+    #chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 0;
+      scroll-behavior: smooth;
+    }
+    #chat::-webkit-scrollbar { width: 4px; }
+    #chat::-webkit-scrollbar-thumb { background: #2a3347; border-radius: 4px; }
+
+    .msg-row {
+      display: flex;
+      padding: 4px 24px;
+      max-width: 800px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .msg-row.user { justify-content: flex-end; }
+    .msg-row.assistant { justify-content: flex-start; }
+
+    .bubble {
+      max-width: 72%;
+      padding: 12px 16px;
+      border-radius: 16px;
+      font-size: 14px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg-row.user .bubble {
+      background: #4f46e5;
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .msg-row.assistant .bubble {
+      background: #161b27;
+      color: #cbd5e1;
+      border: 1px solid #1e2535;
+      border-bottom-left-radius: 4px;
+    }
+
+    /* Assistant avatar */
+    .avatar {
+      width: 28px; height: 28px;
+      background: #1e2535;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+      margin-right: 10px;
+      margin-top: 2px;
+    }
+
+    /* Thinking indicator */
+    .thinking span {
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #475569;
+      animation: blink 1.2s infinite;
+    }
+    .thinking span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink {
+      0%, 80%, 100% { opacity: 0.2; }
+      40% { opacity: 1; }
+    }
+
+    /* Error bubble */
+    .error-bubble {
+      font-size: 13px;
+      color: #f87171;
+      background: rgba(248,113,113,0.08);
+      border: 1px solid rgba(248,113,113,0.2);
+      border-radius: 10px;
+      padding: 10px 14px;
+      max-width: 72%;
+    }
+
+    /* Sources */
+    .sources {
+      max-width: 800px;
+      margin: 4px auto 0;
+      padding: 0 24px 0 62px;
+    }
+    details {
+      background: #0d1117;
+      border: 1px solid #1e2535;
+      border-radius: 10px;
+      font-size: 12.5px;
+      overflow: hidden;
+    }
+    details summary {
+      padding: 8px 12px;
+      cursor: pointer;
+      color: #64748b;
+      user-select: none;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    details summary::-webkit-details-marker { display: none; }
+    details[open] summary { color: #818cf8; border-bottom: 1px solid #1e2535; }
+    .source-item {
+      padding: 10px 12px;
+      border-bottom: 1px solid #1e2535;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+    .source-item:last-child { border-bottom: none; }
+    .source-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #4f46e5;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 3px;
+    }
+    .source-meta {
+      font-size: 11px;
+      color: #475569;
+      margin-top: 4px;
+    }
+
+    /* Metadata badges */
+    .meta-badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 6px 0 2px;
+    }
+    .badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 500;
+    }
+    .badge.confidence { background: rgba(99,102,241,0.12); color: #818cf8; }
+    .badge.cache { background: rgba(16,185,129,0.12); color: #34d399; }
+    .badge.latency { background: rgba(71,85,105,0.4); color: #94a3b8; }
+
+    /* ── Input area ── */
+    #input-area {
+      padding: 16px 24px 20px;
+      background: #0f1117;
+      border-top: 1px solid #1e2535;
+      flex-shrink: 0;
+    }
+    #input-form {
+      max-width: 800px;
+      margin: 0 auto;
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+    #input {
+      flex: 1;
+      background: #161b27;
+      border: 1px solid #2a3347;
+      border-radius: 12px;
+      color: #e2e8f0;
+      font-size: 14px;
+      font-family: inherit;
+      padding: 12px 16px;
+      resize: none;
+      min-height: 48px;
+      max-height: 140px;
+      line-height: 1.5;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    #input:focus { border-color: #4f46e5; }
+    #input::placeholder { color: #475569; }
+    #send-btn {
+      width: 44px; height: 44px;
+      background: #4f46e5;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    #send-btn:hover { background: #4338ca; }
+    #send-btn:disabled { background: #1e2535; cursor: not-allowed; }
+    #send-btn svg { width: 18px; height: 18px; fill: white; }
+    #kb-bar {
+      max-width: 800px;
+      margin: 0 auto 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #kb-bar label { font-size: 12px; color: #475569; flex-shrink: 0; }
+    #kb-select {
+      background: #161b27;
+      border: 1px solid #2a3347;
+      border-radius: 8px;
+      color: #94a3b8;
+      font-size: 12px;
+      padding: 4px 10px;
+      outline: none;
+      cursor: pointer;
+    }
+    #kb-select:focus { border-color: #4f46e5; }
+
+    /* ── Toolbar ── */
+    #toolbar {
+      border-bottom: 1px solid #1e2535;
+      background: #0d1117;
+      padding: 10px 24px;
+      flex-shrink: 0;
+    }
+    #toolbar .toolbar-inner {
+      max-width: 800px;
+      margin: 0 auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    #toolbar .divider {
+      width: 1px;
+      height: 20px;
+      background: #2a3347;
+      flex-shrink: 0;
+    }
+    .tb-input {
+      background: #161b27;
+      border: 1px solid #2a3347;
+      border-radius: 7px;
+      color: #e2e8f0;
+      font-size: 12px;
+      font-family: inherit;
+      padding: 5px 10px;
+      outline: none;
+      height: 30px;
+    }
+    .tb-input:focus { border-color: #4f46e5; }
+    .tb-input::placeholder { color: #475569; }
+    .tb-btn {
+      background: #1e2535;
+      border: 1px solid #2a3347;
+      border-radius: 7px;
+      color: #94a3b8;
+      font-size: 12px;
+      font-family: inherit;
+      padding: 5px 12px;
+      height: 30px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .tb-btn:hover { background: #2a3347; color: #e2e8f0; }
+    .tb-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .tb-btn.primary { background: #312e81; border-color: #4f46e5; color: #a5b4fc; }
+    .tb-btn.primary:hover { background: #3730a3; }
+    #upload-status {
+      font-size: 11px;
+      color: #64748b;
+      min-width: 60px;
+    }
+    #upload-status.ok  { color: #34d399; }
+    #upload-status.err { color: #f87171; }
+
+    /* Empty state */
+    #empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 12px;
+      color: #334155;
+      text-align: center;
+      padding: 20px;
+    }
+    #empty-state .icon { font-size: 40px; opacity: 0.4; }
+    #empty-state h2 { font-size: 18px; font-weight: 600; color: #475569; }
+    #empty-state p { font-size: 13px; color: #334155; max-width: 320px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">🧠</div>
+    <div>
+      <h1>Enterprise Knowledge <span>· RAG</span></h1>
+    </div>
+  </header>
+
+  <div id="toolbar">
+    <div class="toolbar-inner">
+      <!-- Create KB -->
+      <input id="kb-name-input" class="tb-input" placeholder="New KB name…" style="width:160px" />
+      <button id="create-kb-btn" class="tb-btn primary">+ Create KB</button>
+
+      <div class="divider"></div>
+
+      <!-- Upload document -->
+      <input id="file-input" type="file" accept=".pdf,.docx,.txt" style="display:none" />
+      <button id="file-pick-btn" class="tb-btn" onclick="document.getElementById('file-input').click()">📎 Choose File</button>
+      <span id="file-label" style="font-size:12px;color:#475569;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">No file chosen</span>
+      <button id="upload-btn" class="tb-btn primary" disabled>Upload</button>
+      <span id="upload-status"></span>
+    </div>
+  </div>
+
+  <div id="chat">
+    <div id="empty-state">
+      <div class="icon">💬</div>
+      <h2>Ask your documents anything</h2>
+      <p>Select a knowledge base below, then type your question to get AI-powered answers with citations.</p>
+    </div>
+  </div>
+
+  <div id="input-area">
+    <div id="kb-bar">
+      <label>Knowledge Base:</label>
+      <select id="kb-select">
+        <option value="">— select —</option>
+      </select>
+    </div>
+    <div id="input-form">
+      <textarea
+        id="input"
+        placeholder="Ask a question…"
+        rows="1"
+      ></textarea>
+      <button id="send-btn" disabled title="Send">
+        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </div>
+  </div>
+
+<script>
+  const API = "http://localhost:8000";  // ← replace with your backend URL
+
+  // ── State ──────────────────────────────────────────────
+  let token = localStorage.getItem("rag_token") || null;
+  let currentKbId = null;
+  let isStreaming = false;
+
+  const chat = document.getElementById("chat");
+  const input = document.getElementById("input");
+  const sendBtn = document.getElementById("send-btn");
+  const kbSelect = document.getElementById("kb-select");
+
+  // ── Auth (quick inline login) ──────────────────────────
+  async function ensureAuth() {
+    if (token) return true;
+    const email = prompt("Email:");
+    const pass = prompt("Password:");
+    if (!email || !pass) return false;
+    try {
+      const res = await fetch(`${API}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password: pass }),
+      });
+      if (!res.ok) { alert("Login failed"); return false; }
+      const data = await res.json();
+      token = data.access_token;
+      localStorage.setItem("rag_token", token);
+      return true;
+    } catch { alert("Could not reach server"); return false; }
+  }
+
+  function authHeaders(json = true) {
+    const h = {};
+    if (token) h["Authorization"] = `Bearer ${token}`;
+    if (json) h["Content-Type"] = "application/json";
+    return h;
+  }
+
+  // ── Load KBs ───────────────────────────────────────────
+  async function loadKBs() {
+    if (!await ensureAuth()) return;
+    try {
+      const res = await fetch(`${API}/kb`, { headers: authHeaders() });
+      const kbs = await res.json();
+      kbSelect.innerHTML = '<option value="">— select —</option>';
+      kbs.forEach(kb => {
+        const opt = document.createElement("option");
+        opt.value = kb.id;
+        opt.textContent = kb.name;
+        kbSelect.appendChild(opt);
+      });
+      if (kbs.length > 0) {
+        kbSelect.value = kbs[0].id;
+        currentKbId = kbs[0].id;
+        updateSendBtn();
+      }
+    } catch(e) {
+      console.error("Failed to load KBs", e);
+    }
+  }
+
+  kbSelect.addEventListener("change", () => {
+    currentKbId = kbSelect.value || null;
+    updateSendBtn();
+  });
+
+  function updateSendBtn() {
+    sendBtn.disabled = !currentKbId || isStreaming;
+  }
+
+  // ── Auto-resize textarea ────────────────────────────────
+  input.addEventListener("input", () => {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 140) + "px";
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (!sendBtn.disabled) sendMessage();
+    }
+  });
+  sendBtn.addEventListener("click", sendMessage);
+
+  // ── Render helpers ─────────────────────────────────────
+  function appendUserMessage(text) {
+    const empty = document.getElementById("empty-state");
+    if (empty) empty.remove();
+
+    const row = document.createElement("div");
+    row.className = "msg-row user";
+    row.innerHTML = `<div class="bubble">${escHtml(text)}</div>`;
+    chat.appendChild(row);
+    scrollBottom();
+  }
+
+  function appendThinking() {
+    const row = document.createElement("div");
+    row.className = "msg-row assistant";
+    row.id = "thinking-row";
+    row.innerHTML = `
+      <div class="avatar">🤖</div>
+      <div class="bubble thinking">
+        <span></span><span></span><span></span>
+      </div>`;
+    chat.appendChild(row);
+    scrollBottom();
+  }
+
+  function replaceThinkingWithStream() {
+    const row = document.getElementById("thinking-row");
+    if (!row) return null;
+    row.removeAttribute("id");
+    row.id = "stream-row";
+    const bubble = row.querySelector(".bubble");
+    bubble.classList.remove("thinking");
+    bubble.innerHTML = "";
+    return bubble;
+  }
+
+  function finalizeMessage(bubble, fullText, data) {
+    const row = document.getElementById("stream-row");
+    if (row) row.removeAttribute("id");
+
+    // Badges
+    const badges = [];
+    if (data.confidence !== undefined) {
+      const pct = Math.round(data.confidence * 100);
+      badges.push(`<span class="badge confidence">⚡ ${pct}% confidence</span>`);
+    }
+    if (data.cache_hit) {
+      badges.push(`<span class="badge cache">⚡ cached</span>`);
+    }
+    if (data.latency_ms) {
+      badges.push(`<span class="badge latency">${data.latency_ms}ms</span>`);
+    }
+    if (badges.length) {
+      const metaDiv = document.createElement("div");
+      metaDiv.className = "meta-badges";
+      metaDiv.innerHTML = badges.join("");
+      bubble.appendChild(metaDiv);
+    }
+
+    // Sources
+    if (data.sources && data.sources.length > 0) {
+      const container = document.createElement("div");
+      container.className = "sources";
+
+      const itemsHtml = data.sources.map((s, i) => {
+        const name = s.document_name || s.metadata?.filename || `Source ${i + 1}`;
+        const score = s.score !== undefined ? ` · ${Math.round(s.score * 100)}% match` : "";
+        const text = (s.text || "").slice(0, 280) + (s.text?.length > 280 ? "…" : "");
+        return `
+          <div class="source-item">
+            <div class="source-label">📄 ${escHtml(name)}</div>
+            <div>${escHtml(text)}</div>
+            <div class="source-meta">${escHtml(Object.entries(s.metadata || {}).filter(([k]) => k !== "filename").map(([k,v]) => `${k}: ${v}`).join(" · "))}${score}</div>
+          </div>`;
+      }).join("");
+
+      container.innerHTML = `
+        <details>
+          <summary>▸ ${data.sources.length} source${data.sources.length > 1 ? "s" : ""} used</summary>
+          ${itemsHtml}
+        </details>`;
+      bubble.parentElement.insertAdjacentElement("afterend", container);
+    }
+  }
+
+  function appendError(msg) {
+    const row = document.getElementById("thinking-row") || document.getElementById("stream-row");
+    if (row) row.remove();
+    const errRow = document.createElement("div");
+    errRow.className = "msg-row assistant";
+    errRow.innerHTML = `
+      <div class="avatar">🤖</div>
+      <div class="error-bubble">⚠ ${escHtml(msg)}</div>`;
+    chat.appendChild(errRow);
+    scrollBottom();
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function scrollBottom() {
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  // ── Send message (streaming) ────────────────────────────
+  async function sendMessage() {
+    const query = input.value.trim();
+    if (!query || !currentKbId || isStreaming) return;
+
+    input.value = "";
+    input.style.height = "auto";
+    isStreaming = true;
+    updateSendBtn();
+
+    appendUserMessage(query);
+    appendThinking();
+
+    const startTime = Date.now();
+
+    try {
+      const res = await fetch(`${API}/kb/${currentKbId}/stream`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ query }),
+      });
+
+      if (res.status === 422) {
+        appendError("No documents indexed yet. Upload documents to this knowledge base first.");
+        return;
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        appendError(body?.detail || `Request failed (${res.status})`);
+        return;
+      }
+
+      const bubble = replaceThinkingWithStream();
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let fullText = "";
+      let finalData = {};
+      const textNode = document.createTextNode("");
+      bubble.appendChild(textNode);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const raw = trimmed.slice(5).trim();
+          if (raw === "[DONE]") break;
+          try {
+            const chunk = JSON.parse(raw);
+            if (chunk.token) {
+              fullText += chunk.token;
+              textNode.textContent = fullText;
+              scrollBottom();
+            }
+            if (chunk.sources) finalData.sources = chunk.sources;
+            if (chunk.confidence !== undefined) finalData.confidence = chunk.confidence;
+            if (chunk.cache_hit !== undefined) finalData.cache_hit = chunk.cache_hit;
+          } catch { /* skip malformed */ }
+        }
+      }
+
+      finalData.latency_ms = Date.now() - startTime;
+      finalizeMessage(bubble, fullText, finalData);
+      scrollBottom();
+
+    } catch (e) {
+      appendError(e.message || "Failed to connect to the server.");
+    } finally {
+      isStreaming = false;
+      updateSendBtn();
+      input.focus();
+    }
+  }
+
+  // ── Create KB ──────────────────────────────────────────
+  document.getElementById("create-kb-btn").addEventListener("click", async () => {
+    const nameInput = document.getElementById("kb-name-input");
+    const name = nameInput.value.trim();
+    if (!name) { alert("Enter a KB name first."); return; }
+    if (!await ensureAuth()) return;
+
+    const btn = document.getElementById("create-kb-btn");
+    btn.disabled = true;
+    btn.textContent = "Creating…";
+
+    try {
+      const res = await fetch(`${API}/kb`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body?.detail || "Failed to create KB");
+        return;
+      }
+      const kb = await res.json();
+      nameInput.value = "";
+
+      // Refresh list and auto-select the new KB
+      await loadKBs();
+      kbSelect.value = kb.id;
+      currentKbId = kb.id;
+      updateSendBtn();
+    } catch (e) {
+      alert("Error: " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "+ Create KB";
+    }
+  });
+
+  // ── File picker ────────────────────────────────────────
+  const fileInput = document.getElementById("file-input");
+  const fileLabel = document.getElementById("file-label");
+  const uploadBtn = document.getElementById("upload-btn");
+
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files[0];
+    if (file) {
+      fileLabel.textContent = file.name;
+      uploadBtn.disabled = false;
+    } else {
+      fileLabel.textContent = "No file chosen";
+      uploadBtn.disabled = true;
+    }
+  });
+
+  // ── Upload document ────────────────────────────────────
+  uploadBtn.addEventListener("click", async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    if (!currentKbId) { alert("Select a knowledge base first."); return; }
+    if (!await ensureAuth()) return;
+
+    const status = document.getElementById("upload-status");
+    uploadBtn.disabled = true;
+    status.className = "";
+    status.textContent = "Uploading…";
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`${API}/kb/${currentKbId}/documents`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` },  // no Content-Type — let browser set multipart boundary
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        status.className = "err";
+        status.textContent = body?.detail || "Upload failed";
+        return;
+      }
+
+      const doc = await res.json();
+      status.textContent = "Processing…";
+
+      // Poll for indexing completion — button stays disabled until done
+      pollDocStatus(doc.id);
+
+    } catch (e) {
+      status.className = "err";
+      status.textContent = "Error";
+      uploadBtn.disabled = false;
+    }
+  });
+
+  // ── Poll document status ───────────────────────────────
+  function pollDocStatus(docId) {
+    const status = document.getElementById("upload-status");
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API}/kb/${currentKbId}/documents/${docId}`, {
+          headers: authHeaders(),
+        });
+        if (!res.ok) { clearInterval(interval); return; }
+        const doc = await res.json();
+
+        if (doc.status === "indexed") {
+          clearInterval(interval);
+          status.className = "ok";
+          status.textContent = "✓ Indexed";
+          fileInput.value = "";
+          fileLabel.textContent = "No file chosen";
+          uploadBtn.disabled = true;
+        } else if (doc.status === "failed") {
+          clearInterval(interval);
+          status.className = "err";
+          status.textContent = "✗ Failed";
+          uploadBtn.disabled = false;
+        } else {
+          status.textContent = "Processing…";
+        }
+      } catch {
+        clearInterval(interval);
+        uploadBtn.disabled = false;
+      }
+    }, 2500);
+  }
+
+  // ── Boot ───────────────────────────────────────────────
+  loadKBs();
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "incident_id": "INC-1012",
+  "title": "notification-service sending duplicate push notifications",
+  "service": "notification-service",
+  "severity": "SEV2",
+  "timestamp": "2024-12-09T19:32:00Z",
+  "resolved_at": "2024-12-09T20:01:00Z",
+  "duration_minutes": 29,
+  "symptoms": [
+    "Users receiving 3\u20135 identical push notifications per order event",
+    "Push notification provider billing anomaly: 4\u00d7 expected volume",
+    "App store reviews mentioning notification spam"
+  ],
+  "root_cause": "Kafka consumer group rebalance during deploy caused messages to be re-processed without idempotency check. Each partition reassignment replayed last 1000 messages.",
+  "resolution": "Added deduplication check on event_id before sending push notification. Kafka consumer configured with explicit partition assignment during deploys.",
+  "services_affected": [
+    "notification-service",
+    "payment-service"
+  ],
+  "related_prs": [
+    "PR-149"
+  ],
+  "oncall_engineer": "alice_chen",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1012",
+  "scenario_id": null
+}

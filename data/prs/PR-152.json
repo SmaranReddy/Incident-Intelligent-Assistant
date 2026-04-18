@@ -1,0 +1,18 @@
+{
+  "pr_id": "PR-152",
+  "title": "feat: add Prometheus metrics endpoint to auth-service",
+  "service": "auth-service",
+  "summary": "Routine observability change for auth-service. No functional behavior changes.",
+  "files_changed": [
+    "src/metrics/prometheus.py",
+    "src/server.py"
+  ],
+  "author": "liam_foster",
+  "reviewers": [
+    "iris_nakamura",
+    "carol_kim"
+  ],
+  "merged_at": "2025-02-11T10:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

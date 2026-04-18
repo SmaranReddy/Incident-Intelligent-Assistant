@@ -1,0 +1,45 @@
+{
+  "thread_id": "SLACK-0040",
+  "incident_id": "INC-1039",
+  "service": "payment-service",
+  "channel": "#incidents-payment-service",
+  "thread_start": "2025-02-28T21:58:00Z",
+  "thread_end": "2025-02-28T22:20:00Z",
+  "participants": [
+    "alice_chen",
+    "frank_nguyen",
+    "pagerduty-bot"
+  ],
+  "messages": [
+    {
+      "timestamp": "2025-02-28T21:58:00Z",
+      "author": "pagerduty-bot",
+      "text": "\u26a0\ufe0f [SEV1] payment-service: alert threshold breached."
+    },
+    {
+      "timestamp": "2025-02-28T22:02:00Z",
+      "author": "alice_chen",
+      "text": "Checking. Looks like MySQL: 'Deadlock found when trying to get lock; try restarting transaction'. Investigating."
+    },
+    {
+      "timestamp": "2025-02-28T22:05:00Z",
+      "author": "frank_nguyen",
+      "text": "I see it too. Could be related to recent deploy."
+    },
+    {
+      "timestamp": "2025-02-28T22:08:00Z",
+      "author": "alice_chen",
+      "text": "Found the issue: The idempotency lock (SELECT FOR UPDATE on idempotency_keys) is held while waiti.... Deploying fix."
+    },
+    {
+      "timestamp": "2025-02-28T22:12:00Z",
+      "author": "frank_nguyen",
+      "text": "Fix deployed. Metrics recovering."
+    },
+    {
+      "timestamp": "2025-02-28T22:15:00Z",
+      "author": "alice_chen",
+      "text": "Confirmed resolved. Writing up incident report."
+    }
+  ]
+}

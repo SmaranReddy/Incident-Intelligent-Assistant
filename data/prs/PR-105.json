@@ -1,0 +1,19 @@
+{
+  "pr_id": "PR-105",
+  "title": "feat: enrich order history API with product metadata server-side",
+  "service": "order-service",
+  "summary": "Currently /orders/history returns only product IDs; the mobile client makes N individual /products/{id} calls to render the page. Moving this server-side to reduce mobile chattiness and improve load time on 3G. Uses existing ProductService.get_by_id() in a loop for simplicity.",
+  "files_changed": [
+    "src/api/order_history.py",
+    "src/services/product_enrichment.py",
+    "tests/test_order_history.py"
+  ],
+  "author": "grace_okonkwo",
+  "reviewers": [
+    "dave_patel",
+    "henry_silva"
+  ],
+  "merged_at": "2024-10-01T17:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": "n_plus_one_query"
+}

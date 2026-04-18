@@ -1,0 +1,23 @@
+{
+  "runbook_id": "RB-003",
+  "title": "auth-service OOM / High Memory Usage",
+  "service": "auth-service",
+  "issue_type": "high_memory_oom",
+  "last_updated": "2024-09-21T00:00:00Z",
+  "owner_team": "auth-eng",
+  "steps": [
+    "1. Confirm OOM: `kubectl describe pod <pod-name> | grep -A5 'Last State'` \u2014 look for OOMKilled.",
+    "2. Check memory growth rate: Grafana \u2192 auth-service \u2192 Container Memory. Is it linear (leak) or spike (traffic)?",
+    "3. If linear growth: pull heap dump before next OOM: `kubectl exec <pod> -- curl localhost:6060/debug/pprof/heap > heap.prof`",
+    "4. Analyze heap dump: look for unbounded in-memory caches (LRU, dict, set) without TTL or size caps.",
+    "5. Common culprits: JWT cache (token_cache.py), session store, request/response logging buffers.",
+    "6. Immediate relief: increase memory limit temporarily via `MEMORY_LIMIT=2Gi` env var to buy time.",
+    "7. Deploy fix: add TTL and memory-based eviction to identified cache. Reduce max entries.",
+    "8. Verify fix: monitor memory over 2 hours. Should plateau, not grow.",
+    "9. Add alert: `container_memory_usage_bytes > 1.5 * memory_request` \u2192 page oncall."
+  ],
+  "escalation": "Page auth-service oncall. If all replicas OOMKilling simultaneously, page incident commander \u2014 auth down = full site impact.",
+  "related_runbooks": [
+    "RB-004"
+  ]
+}

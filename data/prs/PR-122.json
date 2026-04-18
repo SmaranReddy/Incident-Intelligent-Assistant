@@ -1,0 +1,17 @@
+{
+  "pr_id": "PR-122",
+  "title": "fix: handle timezone-aware datetimes in payment-service serialization",
+  "service": "payment-service",
+  "summary": "Routine bugfix change for payment-service. No functional behavior changes.",
+  "files_changed": [
+    "src/serializers/datetime_serializer.py"
+  ],
+  "author": "kate_brennan",
+  "reviewers": [
+    "iris_nakamura",
+    "eve_thompson"
+  ],
+  "merged_at": "2024-12-02T10:00:00Z",
+  "risk_level": "low",
+  "scenario_id": null
+}

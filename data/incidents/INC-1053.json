@@ -1,0 +1,29 @@
+{
+  "incident_id": "INC-1053",
+  "title": "auth-service mTLS certificate expired \u2014 100% login failure",
+  "service": "auth-service",
+  "severity": "SEV1",
+  "timestamp": "2025-01-15T02:00:00Z",
+  "resolved_at": "2024-10-09T12:33:00Z",
+  "duration_minutes": 42,
+  "symptoms": [
+    "SSL handshake errors: 'certificate has expired or is not yet valid'",
+    "auth-service \u2192 user-service gRPC calls failing with UNAVAILABLE",
+    "All mobile/web login attempts returning 503",
+    "cert-manager logs: 'Not renewing, renewBefore window not reached'",
+    "Oncall paged: auth-service availability dropped to 0% for 8 minutes"
+  ],
+  "root_cause": "When the PR changed renewBefore from 30 days to 7 days, cert-manager re-evaluated all managed certificates. The existing cert had 23 days remaining \u2014 within the old 30-day window but outside the new 7-day window. cert-manager determined 'no renewal needed' since 23 > 7. The cert was never renewed. 23 days later it expired with no automated action triggered and no monitoring alert because cert-expiry alerting only fires at <7 days.",
+  "resolution": "Manually triggered cert rotation: kubectl annotate cert auth-service-tls cert-manager.io/issueAsCertificateRequest=true. Services recovered in 4 minutes after cert propagation. Added cert expiry alert at 14 days AND 7 days. Added CI check: cert expiry must be >30 days after any cert-manager config change.",
+  "services_affected": [
+    "auth-service",
+    "gateway-api",
+    "user-service"
+  ],
+  "related_prs": [
+    "PR-106"
+  ],
+  "oncall_engineer": "dave_patel",
+  "postmortem_url": "https://wiki.internal/postmortems/inc-1006",
+  "scenario_id": null
+}

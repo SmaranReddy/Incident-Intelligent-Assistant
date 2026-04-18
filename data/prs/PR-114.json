@@ -1,0 +1,17 @@
+{
+  "pr_id": "PR-114",
+  "title": "perf: add database index on order-service most-queried columns",
+  "service": "order-service",
+  "summary": "Routine performance change for order-service. No functional behavior changes.",
+  "files_changed": [
+    "db/migrations/add_indexes.sql"
+  ],
+  "author": "liam_foster",
+  "reviewers": [
+    "dave_patel",
+    "carol_kim"
+  ],
+  "merged_at": "2024-11-07T17:00:00Z",
+  "risk_level": "medium",
+  "scenario_id": null
+}

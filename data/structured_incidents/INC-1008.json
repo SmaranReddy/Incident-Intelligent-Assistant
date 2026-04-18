@@ -1,0 +1,25 @@
+{
+  "incident_id": "INC-1008",
+  "service": "gateway-api",
+  "symptoms": [
+    "All endpoint p99 latencies jumped to exactly 30 000 ms",
+    "Requests that previously failed fast at 3 s now hold threads for 30 s",
+    "DB connection pool exhausted as long-running queries held connections open",
+    "Kubernetes: gateway-api HPA scaling to max replicas (50) but not recovering",
+    "Error budget: 9% of monthly SLO budget consumed in 50 minutes"
+  ],
+  "hypotheses_tested": [
+    "gateway deploy today",
+    "NGINX config change for the ML recommendations endpoint",
+    "proxy_read_timeout 30s is in the http block, not in the location block"
+  ],
+  "failed_attempts": [],
+  "confirmed_root_cause": "The NGINX config change placed proxy_read_timeout 30s in the http {} block instead of inside the location /api/v2/recommendations {} block",
+  "resolution_action": "Rolled back nginx.conf to previous configmap version via kubectl rollout undo and applied corrected config with timeout scoped inside the specific location block",
+  "services_affected": [
+    "gateway-api",
+    "auth-service",
+    "user-service"
+  ],
+  "confidence": 0.98
+}
