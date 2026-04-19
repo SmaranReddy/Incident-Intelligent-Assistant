@@ -1,0 +1,202 @@
+[
+  {
+    "incident_id": "EVAL-001",
+    "symptoms": [
+      "checkout requests returning 429 errors",
+      "sudden spike in rate limiting",
+      "users unable to complete purchases"
+    ],
+    "confirmed_root_cause": "rate limiter misconfigured to apply global limits instead of per-user limits",
+    "resolution_action": "rollback rate limiter configuration and restore per-user limits"
+  },
+  {
+    "incident_id": "EVAL-002",
+    "symptoms": [
+      "p99 latency increased from 200ms to 4s",
+      "database CPU usage at 95%",
+      "timeouts in payment service"
+    ],
+    "confirmed_root_cause": "missing database index causing full table scans under load",
+    "resolution_action": "added appropriate index and optimized slow queries"
+  },
+  {
+    "incident_id": "EVAL-003",
+    "symptoms": [
+      "users logged out unexpectedly",
+      "authentication failures increasing",
+      "JWT tokens being rejected"
+    ],
+    "confirmed_root_cause": "JWT signing key rotated without updating all services",
+    "resolution_action": "synchronized JWT keys across services and redeployed auth service"
+  },
+  {
+    "incident_id": "EVAL-004",
+    "symptoms": [
+      "orders created but inventory not updated",
+      "event queue backlog increasing",
+      "missing order events downstream"
+    ],
+    "confirmed_root_cause": "consumer service crashed due to unhandled exception",
+    "resolution_action": "fixed exception handling and restarted consumer service"
+  },
+  {
+    "incident_id": "EVAL-005",
+    "symptoms": [
+      "stale data returned after updates",
+      "cache hit rate unusually high",
+      "users seeing outdated information"
+    ],
+    "confirmed_root_cause": "cache invalidation logic failed after deployment",
+    "resolution_action": "fixed cache invalidation and flushed stale cache entries"
+  },
+  {
+    "incident_id": "EVAL-006",
+    "symptoms": [
+      "API returning 500 errors intermittently",
+      "memory usage increasing continuously",
+      "service restarts triggered by OOM"
+    ],
+    "confirmed_root_cause": "memory leak in request handling logic",
+    "resolution_action": "fixed memory leak and deployed patched version"
+  },
+  {
+    "incident_id": "EVAL-007",
+    "symptoms": [
+      "payment service timeout errors",
+      "connection pool exhaustion",
+      "database connection errors"
+    ],
+    "confirmed_root_cause": "connection pool size too small for increased traffic",
+    "resolution_action": "increased connection pool size and optimized usage"
+  },
+  {
+    "incident_id": "EVAL-008",
+    "symptoms": [
+      "search results missing recent items",
+      "index lag increasing",
+      "new data not searchable"
+    ],
+    "confirmed_root_cause": "search indexing pipeline stalled due to backlog",
+    "resolution_action": "cleared backlog and scaled indexing workers"
+  },
+  {
+    "incident_id": "EVAL-009",
+    "symptoms": [
+      "sudden spike in 503 errors",
+      "load balancer marking instances unhealthy",
+      "traffic unevenly distributed"
+    ],
+    "confirmed_root_cause": "health check endpoint failing due to dependency timeout",
+    "resolution_action": "fixed health check logic and increased timeout threshold"
+  },
+  {
+    "incident_id": "EVAL-010",
+    "symptoms": [
+      "users unable to login",
+      "authentication service returning errors",
+      "increased login failures"
+    ],
+    "confirmed_root_cause": "misconfigured environment variable for auth service",
+    "resolution_action": "corrected environment configuration and restarted service"
+  },
+  {
+    "incident_id": "EVAL-011",
+    "symptoms": [
+      "slow API responses after deployment",
+      "CPU usage spike",
+      "high thread contention"
+    ],
+    "confirmed_root_cause": "inefficient algorithm introduced in new release",
+    "resolution_action": "rolled back deployment and optimized algorithm"
+  },
+  {
+    "incident_id": "EVAL-012",
+    "symptoms": [
+      "duplicate orders being created",
+      "retry mechanism triggered excessively",
+      "idempotency failures"
+    ],
+    "confirmed_root_cause": "missing idempotency checks in order processing",
+    "resolution_action": "implemented idempotency keys and fixed retry logic"
+  },
+  {
+    "incident_id": "EVAL-013",
+    "symptoms": [
+      "email notifications delayed",
+      "queue size increasing",
+      "worker lag observed"
+    ],
+    "confirmed_root_cause": "worker instances insufficient for current load",
+    "resolution_action": "scaled worker instances horizontally"
+  },
+  {
+    "incident_id": "EVAL-014",
+    "symptoms": [
+      "API returning incorrect data",
+      "recent deployment included schema changes",
+      "data mismatch observed"
+    ],
+    "confirmed_root_cause": "database schema change not backward compatible",
+    "resolution_action": "rolled back schema change and added migration support"
+  },
+  {
+    "incident_id": "EVAL-015",
+    "symptoms": [
+      "frequent service crashes",
+      "segmentation faults observed",
+      "core dumps generated"
+    ],
+    "confirmed_root_cause": "bug in native dependency causing segmentation fault",
+    "resolution_action": "updated dependency to stable version"
+  },
+  {
+    "incident_id": "EVAL-016",
+    "symptoms": [
+      "API latency spikes during peak hours",
+      "autoscaling not triggering",
+      "instances under heavy load"
+    ],
+    "confirmed_root_cause": "autoscaling policy misconfigured",
+    "resolution_action": "fixed autoscaling thresholds and rules"
+  },
+  {
+    "incident_id": "EVAL-017",
+    "symptoms": [
+      "file uploads failing",
+      "storage service returning errors",
+      "disk space alerts triggered"
+    ],
+    "confirmed_root_cause": "disk space exhausted on storage nodes",
+    "resolution_action": "cleaned up disk space and increased storage capacity"
+  },
+  {
+    "incident_id": "EVAL-018",
+    "symptoms": [
+      "notifications not delivered",
+      "external API errors",
+      "timeouts in third-party integration"
+    ],
+    "confirmed_root_cause": "third-party API outage affecting notifications",
+    "resolution_action": "implemented retry with backoff and fallback handling"
+  },
+  {
+    "incident_id": "EVAL-019",
+    "symptoms": [
+      "high error rate in checkout",
+      "dependency service latency increased",
+      "timeouts cascading across services"
+    ],
+    "confirmed_root_cause": "downstream service latency causing cascading failures",
+    "resolution_action": "added circuit breaker and timeout handling"
+  },
+  {
+    "incident_id": "EVAL-020",
+    "symptoms": [
+      "data inconsistency between services",
+      "event processing delays",
+      "missing updates in downstream systems"
+    ],
+    "confirmed_root_cause": "event delivery failures due to message broker issues",
+    "resolution_action": "fixed broker configuration and replayed events"
+  }
+]

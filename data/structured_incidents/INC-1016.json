@@ -1,0 +1,21 @@
+{
+  "incident_id": "INC-1016",
+  "service": "order-service",
+  "symptoms": [
+    "Merchant A seeing order data from Merchant B in search results",
+    "tenant_id filter missing from Elasticsearch query",
+    "Potential data privacy compliance issue — legal notified"
+  ],
+  "hypotheses_tested": [
+    "Recent deploy caused the issue"
+  ],
+  "failed_attempts": [],
+  "confirmed_root_cause": "New Elasticsearch query builder did not include tenant_id filter clause. Single-tenant Elasticsearch index had tenant isolation enforced at query level, not index level.",
+  "resolution_action": "Hotfix added mandatory tenant_id term filter to all search queries. Full audit of all ES queries conducted. No evidence of bulk data exfiltration.",
+  "services_affected": [
+    "order-service",
+    "notification-service",
+    "inventory-service"
+  ],
+  "confidence": 0.95
+}

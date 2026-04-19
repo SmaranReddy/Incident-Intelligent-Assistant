@@ -21,6 +21,7 @@ import asyncio
 import json
 import re
 import time
+import traceback
 import uuid
 import logging
 from typing import AsyncIterator, List, Optional
@@ -139,13 +140,13 @@ def _compute_confidence(chunks: list, answer: str = "") -> float:
     weights = [0.6, 0.3, 0.1]
     total_w, total_s = 0.0, 0.0
     for chunk, w in zip(chunks[:3], weights):
-        total_s += chunk["score"] * w
+        total_s += chunk.get("score", 0) * w
         total_w += w
-    base = total_s / total_w
+    base = total_s / total_w if total_w else 0.0
 
     # Rule 3 — multi-chunk agreement boost
     if len(chunks) >= 2:
-        avg = sum(c["score"] for c in chunks[:3]) / min(3, len(chunks))
+        avg = sum(c.get("score", 0) for c in chunks[:3]) / min(3, len(chunks))
         if avg > 0.6:
             base = min(1.0, base * 1.1)
 
@@ -357,35 +358,125 @@ def _retrieve_and_rerank(kb_id: str, query: str, retrieval_query: str, body: Que
 # Incident intelligence — builds structured insights from reranked chunks
 # ---------------------------------------------------------------------------
 
-def _build_incident_insights(reranked: list) -> dict:
-    structured = [c for c in reranked if c.get("structured")]
+_STRUCTURED_REQUIRED_FIELDS = (
+    "incident_id", "service", "root_cause", "resolution",
+    "services_affected", "structured_score",
+)
 
-    best = max(structured, key=lambda c: c["score"], default=None)
-    root_causes = [best["structured"]["root_cause"]] if best and best["structured"].get("root_cause") else []
-    resolutions = [best["structured"]["resolution"]] if best and best["structured"].get("resolution") else []
 
-    affected_services = list({
-        svc
-        for c in structured
-        for svc in c["structured"].get("services_affected", [])
-    })
+def _safe_structured_info(s: Optional[dict], chunk_id: str = "") -> Optional[StructuredInfo]:
+    """Build StructuredInfo from a raw dict, filling missing required fields with safe defaults.
 
-    similar_incidents = [
-        SimilarIncident(
-            incident_id=c["structured"]["incident_id"],
-            service=c["structured"]["service"],
-            score=round(c["score"], 2),
+    StructuredInfo has no field defaults, so passing an incomplete dict via **unpacking
+    raises a Pydantic ValidationError → 500. This helper prevents that.
+    """
+    if not s or not isinstance(s, dict):
+        return None
+
+    missing = [f for f in _STRUCTURED_REQUIRED_FIELDS if not s.get(f)]
+    if missing:
+        logger.warning(
+            "Structured chunk has missing/empty fields | chunk_id=%s | missing=%s",
+            chunk_id or s.get("incident_id", "?"), missing,
         )
-        for c in structured[:5]
-        if c["structured"].get("incident_id") and c["structured"].get("service")
-    ]
 
-    return {
-        "likely_root_cause": root_causes[0] if root_causes else None,
-        "suggested_fix": resolutions[0] if resolutions else None,
-        "similar_incidents": [s.model_dump() for s in similar_incidents],
-        "affected_services": affected_services,
-    }
+    try:
+        return StructuredInfo(
+            incident_id=str(s.get("incident_id") or ""),
+            service=str(s.get("service") or ""),
+            root_cause=str(s.get("root_cause") or ""),
+            resolution=str(s.get("resolution") or ""),
+            services_affected=[str(x) for x in s.get("services_affected") or []],
+            structured_score=float(s.get("structured_score") or 0.0),
+        )
+    except Exception as exc:
+        logger.warning(
+            "StructuredInfo validation failed | chunk_id=%s | error=%s",
+            chunk_id or s.get("incident_id", "?"), exc,
+        )
+        return None
+
+
+_EMPTY_INSIGHTS: dict = {
+    "likely_root_cause": None,
+    "suggested_fix": None,
+    "similar_incidents": [],
+    "affected_services": [],
+}
+
+
+def _build_incident_insights(reranked: list) -> dict:
+    try:
+        if not reranked:
+            return _EMPTY_INSIGHTS.copy()
+
+        invalid_count = 0
+        structured = []
+        for c in reranked:
+            raw = c.get("structured")
+            if not raw:
+                continue
+            info = _safe_structured_info(raw, chunk_id=c.get("id", ""))
+            if info is None:
+                invalid_count += 1
+            else:
+                structured.append(c)
+
+        if invalid_count:
+            logger.warning(
+                "Dropped %d structured chunk(s) due to invalid/incomplete data", invalid_count
+            )
+
+        if not structured:
+            return _EMPTY_INSIGHTS.copy()
+
+        top_chunks = sorted(structured, key=lambda c: c.get("score", 0), reverse=True)[:5]
+
+        root_cause_scores: dict[str, float] = {}
+        root_cause_resolution: dict[str, str] = {}
+
+        for chunk in top_chunks:
+            s = chunk.get("structured") or {}
+            rc = s.get("root_cause")
+            if not rc:
+                continue
+            root_cause_scores[rc] = root_cause_scores.get(rc, 0.0) + chunk.get("score", 0)
+            if rc not in root_cause_resolution and s.get("resolution"):
+                root_cause_resolution[rc] = s["resolution"]
+
+        if root_cause_scores:
+            best_root_cause = max(root_cause_scores, key=root_cause_scores.get)
+            suggested_fix = root_cause_resolution.get(best_root_cause)
+        else:
+            best_root_cause = None
+            suggested_fix = None
+
+        affected_services = list({
+            svc
+            for c in structured
+            for svc in (c.get("structured") or {}).get("services_affected", [])
+            if isinstance(svc, str)
+        })
+
+        similar_incidents = [
+            SimilarIncident(
+                incident_id=c["structured"].get("incident_id", ""),
+                service=c["structured"].get("service", ""),
+                score=round(c.get("score", 0), 2),
+            )
+            for c in structured[:5]
+            if (c.get("structured") or {}).get("incident_id") and (c.get("structured") or {}).get("service")
+        ]
+
+        return {
+            "likely_root_cause": best_root_cause,
+            "suggested_fix": suggested_fix,
+            "similar_incidents": [s.model_dump() for s in similar_incidents],
+            "affected_services": affected_services,
+        }
+    except Exception:
+        logger.exception("_build_incident_insights failed — returning empty insights")
+        return _EMPTY_INSIGHTS.copy()
 
 
 # ---------------------------------------------------------------------------
@@ -430,97 +521,122 @@ async def query_kb(
     request_id = str(uuid.uuid4())
     t0 = time.perf_counter()
 
-    # Task 5: optional query rewriting (uses retrieval_query for embedding/search)
-    retrieval_query = _maybe_rewrite_query(body.query)
+    logger.info("Received query | kb=%s | query=%r", kb_id, body.query[:80])
 
-    # Retrieve + re-rank
     try:
-        results, reranked = _retrieve_and_rerank(kb_id, body.query, retrieval_query, body)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        # Task 5: optional query rewriting (uses retrieval_query for embedding/search)
+        retrieval_query = _maybe_rewrite_query(body.query)
 
-    t_retrieval_ms = int((time.perf_counter() - t0) * 1000)
+        # Retrieve + re-rank
+        try:
+            results, reranked = _retrieve_and_rerank(kb_id, body.query, retrieval_query, body)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
 
-    # Grounding check — skip LLM entirely if chunks are unrelated to the query
-    is_grounded, ground_reason = _check_grounding(body.query, results, reranked)
-    if not is_grounded:
+        logger.info("Retrieved %d chunks after reranking | kb=%s", len(reranked), kb_id)
+
+        t_retrieval_ms = int((time.perf_counter() - t0) * 1000)
+
+        # Grounding check — skip LLM entirely if chunks are unrelated to the query
+        is_grounded, ground_reason = _check_grounding(body.query, results, reranked)
+        if not is_grounded:
+            latency_ms = int((time.perf_counter() - t0) * 1000)
+            logger.info(
+                "Grounding FAILED | kb=%s | query=%r | reason=%s | latency_ms=%d",
+                kb_id, body.query[:80], ground_reason, latency_ms,
+            )
+            return QueryResponse(
+                request_id=request_id,
+                answer=_GROUNDING_FALLBACK,
+                sources=[],
+                confidence=0.0,
+                latency_ms=latency_ms,
+                cache_hit=False,
+                model_used=settings.LLM_MODEL,
+            )
+
+        logger.debug("Grounding OK | kb=%s | reason=%s", kb_id, ground_reason)
+
+        # Generate answer using original query (not rewritten) for user-facing accuracy
+        context = [c["text"] for c in reranked if c.get("text")]
+        answer = _get_generator().generate(query=body.query, retrieved_chunks=context)
+
         latency_ms = int((time.perf_counter() - t0) * 1000)
+        # Task 6: improved confidence uses the generated answer
+        confidence = _compute_confidence(reranked, answer)
+
+        sources = [
+            SourceChunk(
+                id=c.get("id", ""),
+                text=(c.get("text") or "")[:300],
+                source=c.get("source", ""),
+                score=c.get("score", 0.0),
+                structured=_safe_structured_info(c.get("structured"), chunk_id=c.get("id", "")),
+            )
+            for c in reranked
+        ]
+
+        # Task 8: store in cache
+        cacheable = {
+            "request_id": request_id,
+            "answer": answer,
+            "sources": [s.model_dump() for s in sources],
+            "confidence": confidence,
+            "latency_ms": latency_ms,
+            "cache_hit": False,
+            "model_used": settings.LLM_MODEL,
+            **_build_incident_insights(reranked),
+        }
+        _cache.set(cache_key, cacheable)
+
+        # Task 7: structured observability log
         logger.info(
-            "Grounding FAILED | kb=%s | query=%r | reason=%s | latency_ms=%d",
-            kb_id, body.query[:80], ground_reason, latency_ms,
+            "Query complete | kb=%s | query=%r | retrieval_ms=%d | total_ms=%d | "
+            "retrieved=%d | reranked=%d | confidence=%.3f | cache_hit=False",
+            kb_id, body.query[:80], t_retrieval_ms, latency_ms,
+            len(results), len(reranked), confidence,
         )
+
+        # Log to DB
+        log = QueryLog(
+            org_id=principal.org_id,
+            kb_id=kb_id,
+            user_id=principal.user_id,
+            api_key_id=principal.api_key_id,
+            question=body.query,
+            answer=answer,
+            chunk_ids=[c.get("id", "") for c in reranked],
+            confidence=confidence,
+            model_used=settings.LLM_MODEL,
+            latency_ms=latency_ms,
+            cache_hit=False,
+        )
+        db.add(log)
+        await db.commit()
+
+        return QueryResponse(**cacheable)
+
+    except HTTPException:
+        raise
+    except Exception:
+        print("\n=== QUERY HANDLER TRACEBACK ===")
+        traceback.print_exc()
+        print("================================\n")
+        logger.exception("Query failed | kb=%s | query=%r", kb_id, body.query[:80])
+        latency_ms = int((time.perf_counter() - t0) * 1000)
         return QueryResponse(
             request_id=request_id,
-            answer=_GROUNDING_FALLBACK,
+            answer="I don't have enough information to answer this question.",
             sources=[],
             confidence=0.0,
             latency_ms=latency_ms,
             cache_hit=False,
             model_used=settings.LLM_MODEL,
+            likely_root_cause=None,
+            suggested_fix=None,
+            similar_incidents=[],
+            affected_services=[],
         )
-
-    logger.debug("Grounding OK | kb=%s | reason=%s", kb_id, ground_reason)
-
-    # Generate answer using original query (not rewritten) for user-facing accuracy
-    context = [c["text"] for c in reranked]
-    answer = _get_generator().generate(query=body.query, retrieved_chunks=context)
-
-    latency_ms = int((time.perf_counter() - t0) * 1000)
-    # Task 6: improved confidence uses the generated answer
-    confidence = _compute_confidence(reranked, answer)
-
-    sources = [
-        SourceChunk(
-            id=c["id"],
-            text=c["text"][:300],
-            source=c.get("source", ""),
-            score=c["score"],
-            structured=(
-                StructuredInfo(**c["structured"]) if c.get("structured") else None
-            ),
-        )
-        for c in reranked
-    ]
-
-    # Task 8: store in cache
-    cacheable = {
-        "request_id": request_id,
-        "answer": answer,
-        "sources": [s.model_dump() for s in sources],
-        "confidence": confidence,
-        "latency_ms": latency_ms,
-        "cache_hit": False,
-        "model_used": settings.LLM_MODEL,
-        **_build_incident_insights(reranked),
-    }
-    _cache.set(cache_key, cacheable)
-
-    # Task 7: structured observability log
-    logger.info(
-        "Query complete | kb=%s | query=%r | retrieval_ms=%d | total_ms=%d | "
-        "retrieved=%d | reranked=%d | confidence=%.3f | cache_hit=False",
-        kb_id, body.query[:80], t_retrieval_ms, latency_ms,
-        len(results), len(reranked), confidence,
-    )
-
-    # Log to DB
-    log = QueryLog(
-        org_id=principal.org_id,
-        kb_id=kb_id,
-        user_id=principal.user_id,
-        api_key_id=principal.api_key_id,
-        question=body.query,
-        answer=answer,
-        chunk_ids=[c["id"] for c in reranked],
-        confidence=confidence,
-        model_used=settings.LLM_MODEL,
-        latency_ms=latency_ms,
-        cache_hit=False,
-    )
-    db.add(log)
-    await db.commit()
-
-    return QueryResponse(**cacheable)
 
 
 # ---------------------------------------------------------------------------

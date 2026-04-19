@@ -1,0 +1,24 @@
+{
+  "incident_id": "INC-1019",
+  "service": "inventory-service",
+  "symptoms": [
+    "inventory.stock_count reaching -47 for high-demand SKU",
+    "Overselling: 47 orders for an item with 0 remaining stock",
+    "Warehouse team unable to fulfill 47 orders"
+  ],
+  "hypotheses_tested": [
+    "recent changes",
+    "deploy 20 minutes ago"
+  ],
+  "failed_attempts": [
+    "rollback"
+  ],
+  "confirmed_root_cause": "Stock decrement used read-then-write pattern without atomic operation: read stock, check > 0, subtract 1, write back. Under concurrent checkouts, multiple threads read stock > 0 simultaneously and all decrement, yielding negative values.",
+  "resolution_action": "Replaced read-then-write with UPDATE inventory SET stock = stock - 1 WHERE id = ? AND stock > 0. Affected orders manually cancelled with customer notification.",
+  "services_affected": [
+    "inventory-service",
+    "checkout-service",
+    "order-service"
+  ],
+  "confidence": 0.94
+}

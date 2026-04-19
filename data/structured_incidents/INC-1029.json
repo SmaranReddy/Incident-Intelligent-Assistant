@@ -1,0 +1,22 @@
+{
+  "incident_id": "INC-1029",
+  "service": "auth-service",
+  "symptoms": [
+    "Kubernetes events: 'OOMKilled' on all 3 auth-service replicas in rotation",
+    "Memory usage grows linearly from 280 MB baseline to ~2.1 GB before kill",
+    "Intermittent 5xx errors during pod restart window (45–90 s)",
+    "Token validation p99 latency spikes from 2 ms to 400 ms ahead of each OOM",
+    "Heap dump shows LRUCache holding 50 000 entries at ~42 KB each"
+  ],
+  "hypotheses_tested": [
+    "recent deploy caused the issue"
+  ],
+  "failed_attempts": [],
+  "confirmed_root_cause": "The PR description mis-estimated cache memory at ~50 MB. Actual decoded JWT objects include full user claims, roles, and metadata averaging 42 KB each, not 1 KB. At 50 000 entries the cache consumes 2.1 GB. Additionally, the cache was bounded by count not by memory, and no TTL was set, so entries only evict after 50 001 distinct tokens are seen — meaning active sessions are never evicted.",
+  "resolution_action": "Added 5-minute TTL to all cache entries. Reduced max-entries to 10 000. Added memory-based eviction threshold at 150 MB via cachetools MemoryCache. Added Grafana panel for cache memory and eviction rate. Auth-service memory now stable at 310–340 MB.",
+  "services_affected": [
+    "auth-service",
+    "gateway-api"
+  ],
+  "confidence": 0.98
+}

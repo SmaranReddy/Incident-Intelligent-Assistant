@@ -1,0 +1,24 @@
+{
+  "incident_id": "INC-1022",
+  "service": "checkout-service",
+  "symptoms": [
+    "HTTP 429 rate spiked from near-zero to 38% of all responses",
+    "Checkout funnel abandonment increased 4× in real-time analytics",
+    "p99 latency on POST /checkout jumped from 320 ms to 5 200 ms",
+    "Support queue: 200+ tickets in 90 minutes about failed payments",
+    "order-service receiving 60% fewer order-created events than baseline"
+  ],
+  "hypotheses_tested": [
+    "Recent changes",
+    "The fixed-window counter was applied at the global service level rather than per user"
+  ],
+  "failed_attempts": [],
+  "confirmed_root_cause": "The fixed-window counter was applied at the global service level rather than per user. All traffic shares a single counter that resets every 60 seconds. At 08:45 UTC normal morning traffic naturally exceeded 100 requests within the window, causing the counter to block ALL subsequent requests for the remainder of the minute, including legitimate checkouts.",
+  "resolution_action": "Rolled back rate_limiter.py to the previous sliding-window implementation. Temporarily set global limit to 10 000 req/min as blast radius control.",
+  "services_affected": [
+    "checkout-service",
+    "payment-service",
+    "inventory-service"
+  ],
+  "confidence": 0.98
+}

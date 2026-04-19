@@ -1,0 +1,122 @@
+[
+  {
+    "incident_id": "EVAL-001",
+    "service": "generic-service",
+    "symptoms": [
+      "checkout requests returning 429 errors",
+      "sudden spike in rate limiting",
+      "users unable to complete purchases"
+    ],
+    "root_cause": "rate limiter misconfigured to apply global limits instead of per-user limits",
+    "resolution": "rollback rate limiter configuration and restore per-user limits",
+    "services_affected": ["generic-service"]
+  },
+  {
+    "incident_id": "EVAL-002",
+    "service": "generic-service",
+    "symptoms": [
+      "p99 latency increased from 200ms to 4s",
+      "database CPU usage at 95%",
+      "timeouts in payment service"
+    ],
+    "root_cause": "missing database index causing full table scans under load",
+    "resolution": "added appropriate index and optimized slow queries",
+    "services_affected": ["generic-service"]
+  },
+  {
+    "incident_id": "EVAL-003",
+    "service": "auth-service",
+    "symptoms": [
+      "users logged out unexpectedly",
+      "authentication failures increasing",
+      "JWT tokens being rejected"
+    ],
+    "root_cause": "JWT signing key rotated without updating all services",
+    "resolution": "synchronized JWT keys across services and redeployed auth service",
+    "services_affected": ["auth-service"]
+  },
+  {
+    "incident_id": "EVAL-004",
+    "service": "order-service",
+    "symptoms": [
+      "orders created but inventory not updated",
+      "event queue backlog increasing",
+      "missing order events downstream"
+    ],
+    "root_cause": "consumer service crashed due to unhandled exception",
+    "resolution": "fixed exception handling and restarted consumer service",
+    "services_affected": ["order-service"]
+  },
+  {
+    "incident_id": "EVAL-005",
+    "service": "cache-service",
+    "symptoms": [
+      "stale data returned after updates",
+      "cache hit rate unusually high",
+      "users seeing outdated information"
+    ],
+    "root_cause": "cache invalidation logic failed after deployment",
+    "resolution": "fixed cache invalidation and flushed stale cache entries",
+    "services_affected": ["cache-service"]
+  },
+  {
+    "incident_id": "EVAL-006",
+    "service": "api-service",
+    "symptoms": [
+      "API returning 500 errors intermittently",
+      "memory usage increasing continuously",
+      "service restarts triggered by OOM"
+    ],
+    "root_cause": "memory leak in request handling logic",
+    "resolution": "fixed memory leak and deployed patched version",
+    "services_affected": ["api-service"]
+  },
+  {
+    "incident_id": "EVAL-007",
+    "service": "payment-service",
+    "symptoms": [
+      "payment service timeout errors",
+      "connection pool exhaustion",
+      "database connection errors"
+    ],
+    "root_cause": "connection pool size too small for increased traffic",
+    "resolution": "increased connection pool size and optimized usage",
+    "services_affected": ["payment-service"]
+  },
+  {
+    "incident_id": "EVAL-008",
+    "service": "search-service",
+    "symptoms": [
+      "search results missing recent items",
+      "index lag increasing",
+      "new data not searchable"
+    ],
+    "root_cause": "search indexing pipeline stalled due to backlog",
+    "resolution": "cleared backlog and scaled indexing workers",
+    "services_affected": ["search-service"]
+  },
+  {
+    "incident_id": "EVAL-009",
+    "service": "gateway-service",
+    "symptoms": [
+      "sudden spike in 503 errors",
+      "load balancer marking instances unhealthy",
+      "traffic unevenly distributed"
+    ],
+    "root_cause": "health check endpoint failing due to dependency timeout",
+    "resolution": "fixed health check logic and increased timeout threshold",
+    "services_affected": ["gateway-service"]
+  },
+  {
+    "incident_id": "EVAL-010",
+    "service": "auth-service",
+    "symptoms": [
+      "users unable to login",
+      "authentication service returning errors",
+      "increased login failures"
+    ],
+    "root_cause": "misconfigured environment variable for auth service",
+    "resolution": "corrected environment configuration and restarted service",
+    "services_affected": ["auth-service"]
+  }
+]

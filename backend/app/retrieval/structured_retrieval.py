@@ -211,11 +211,12 @@ class StructuredIncidentStore:
 
         # ── Symptom overlap (0.35) ────────────────────────────────────────
         if attrs.keywords:
-            # Combine symptoms + root cause text for broad matching
+            # Guard: symptoms may be None in malformed records
+            symptoms = incident.get("symptoms") or []
             symptom_corpus = (
-                " ".join(incident.get("symptoms", []))
-                + " " + incident.get("confirmed_root_cause", "")
-                + " " + incident.get("resolution_action", "")
+                " ".join(symptoms)
+                + " " + (incident.get("confirmed_root_cause") or "")
+                + " " + (incident.get("resolution_action") or "")
             ).lower()
             corpus_tokens = set(re.findall(r"[a-z0-9]+", symptom_corpus))
             query_tokens = set(attrs.keywords)
@@ -225,8 +226,8 @@ class StructuredIncidentStore:
         # ── Root cause / resolution keyword match (0.25) ─────────────────
         if attrs.keywords or attrs.error_types:
             cause_text = (
-                incident.get("confirmed_root_cause", "")
-                + " " + incident.get("resolution_action", "")
+                (incident.get("confirmed_root_cause") or "")
+                + " " + (incident.get("resolution_action") or "")
             ).lower()
             cause_tokens = set(re.findall(r"[a-z0-9]+", cause_text))
 
@@ -293,12 +294,12 @@ class StructuredIncidentStore:
         This is what surfaces in the API response under each source chunk.
         """
         return {
-            "incident_id":       incident.get("incident_id", ""),
-            "service":           incident.get("service", ""),
-            "root_cause":        incident.get("confirmed_root_cause", ""),
-            "resolution":        incident.get("resolution_action", ""),
-            "services_affected": incident.get("services_affected", []),
-            "structured_score":  round(structured_score, 4),
+            "incident_id":       str(incident.get("incident_id") or ""),
+            "service":           str(incident.get("service") or ""),
+            "root_cause":        str(incident.get("confirmed_root_cause") or ""),
+            "resolution":        str(incident.get("resolution_action") or ""),
+            "services_affected": list(incident.get("services_affected") or []),
+            "structured_score":  round(float(structured_score), 4),
         }
 
     def make_synthetic_chunk(self, incident: dict, structured_score: float) -> dict:
@@ -309,7 +310,7 @@ class StructuredIncidentStore:
         The synthetic chunk uses the structured_score as its retrieval score
         so it competes fairly with hybrid results during reranking.
         """
-        symptoms_lines = "\n".join(f"- {s}" for s in incident.get("symptoms", []))
+        symptoms_lines = "\n".join(f"- {s}" for s in (incident.get("symptoms") or []))
         text = (
             f"Incident {incident.get('incident_id', 'UNKNOWN')}"
             f" [{incident.get('service', 'unknown-service')}]\n"

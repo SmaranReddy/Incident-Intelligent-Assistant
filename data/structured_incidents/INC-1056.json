@@ -1,0 +1,11 @@
+{
+  "incident_id": "INC-1056",
+  "service": "checkout-service",
+  "symptoms": [],
+  "hypotheses_tested": [],
+  "failed_attempts": [],
+  "confirmed_root_cause": null,
+  "resolution_action": null,
+  "services_affected": [],
+  "confidence": 0.0
+}

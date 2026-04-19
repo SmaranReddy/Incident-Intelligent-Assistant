@@ -198,43 +198,53 @@ def incident_query(body: _IncidentQueryRequest):
     keywords, and root-cause signals.  Returns ranked similar incidents with
     the top match's root cause and resolution surfaced as first-class fields.
     """
-    store = _get_incident_store()
-    hits = store.search(body.query, top_k=10, min_score=0.10)
+    _empty = _IncidentQueryResponse(
+        query=body.query,
+        likely_root_cause="No matching incidents found for this query.",
+        suggested_fix="Try describing the affected service or specific error type.",
+        similar_incidents=[],
+        affected_services=[],
+        confidence=0.0,
+    )
 
-    if not hits:
+    try:
+        store = _get_incident_store()
+        hits = store.search(body.query, top_k=10, min_score=0.10)
+
+        if not hits:
+            return _empty
+
+        top_incident, top_score = hits[0]
+
+        # Aggregate affected services across top-3 matches
+        seen_services: set = set()
+        for inc, _ in hits[:3]:
+            # Guard: services_affected may be None in malformed incident records
+            seen_services.update(inc.get("services_affected") or [])
+
+        similar = [
+            _SimilarIncident(
+                incident_id=str(inc.get("incident_id") or ""),
+                service=str(inc.get("service") or ""),
+                score=round(float(score), 4),
+            )
+            for inc, score in hits
+        ]
+
         return _IncidentQueryResponse(
             query=body.query,
-            likely_root_cause="No matching incidents found for this query.",
-            suggested_fix="Try describing the affected service or specific error type.",
-            similar_incidents=[],
-            affected_services=[],
-            confidence=0.0,
+            likely_root_cause=str(top_incident.get("confirmed_root_cause") or "Unknown"),
+            suggested_fix=str(top_incident.get("resolution_action") or "No resolution recorded."),
+            similar_incidents=similar,
+            affected_services=sorted(seen_services),
+            confidence=round(float(top_score), 3),
         )
 
-    top_incident, top_score = hits[0]
-
-    # Aggregate affected services across top-3 matches
-    seen_services: set = set()
-    for inc, _ in hits[:3]:
-        seen_services.update(inc.get("services_affected", []))
-
-    similar = [
-        _SimilarIncident(
-            incident_id=inc.get("incident_id", ""),
-            service=inc.get("service", ""),
-            score=round(score, 4),
-        )
-        for inc, score in hits
-    ]
-
-    return _IncidentQueryResponse(
-        query=body.query,
-        likely_root_cause=top_incident.get("confirmed_root_cause", "Unknown"),
-        suggested_fix=top_incident.get("resolution_action", "No resolution recorded."),
-        similar_incidents=similar,
-        affected_services=sorted(seen_services),
-        confidence=round(top_score, 3),
-    )
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        log.error("incident_query failed for query=%r", body.query)
+        return _empty
 
 
 # --------------------------------------------------------------------------

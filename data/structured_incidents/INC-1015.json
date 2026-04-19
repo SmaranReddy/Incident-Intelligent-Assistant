@@ -1,0 +1,23 @@
+{
+  "incident_id": "INC-1015",
+  "service": "checkout-service",
+  "symptoms": [
+    "B2B customers reporting incorrect discount tiers applied at checkout",
+    "Orders with qty > 100 items receiving 5% discount instead of contracted 20%",
+    "Finance flagging margin anomaly on B2B segment"
+  ],
+  "hypotheses_tested": [
+    "Recent changes",
+    "Off-by-one error in discount tier boundary check"
+  ],
+  "failed_attempts": [
+    "Rolling back (initially attempted before identifying the correct fix)"
+  ],
+  "confirmed_root_cause": "Off-by-one error in discount tier boundary check. Condition was cart.quantity > 100 but should be cart.quantity >= 100. Exactly 100-item orders fell into wrong tier.",
+  "resolution_action": "Fixed boundary condition to >=. Issued credit notes for affected orders in past 30 days.",
+  "services_affected": [
+    "checkout-service",
+    "inventory-service"
+  ],
+  "confidence": 0.9
+}

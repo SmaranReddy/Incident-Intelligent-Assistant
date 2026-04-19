@@ -46,7 +46,7 @@ SLACK_DIR      = Path("data/slack")
 OUTPUT_DIR     = Path("data/structured_incidents")
 
 # Default to a capable model; override with --model or EXTRACTION_MODEL env var
-DEFAULT_MODEL     = os.getenv("EXTRACTION_MODEL", "llama-3.3-70b-versatile")
+DEFAULT_MODEL     = os.getenv("EXTRACTION_MODEL", "llama-3.1-8b-instant")
 MAX_SLACK_MSGS    = 60     # truncate very long threads to avoid token overflow
 RETRY_ATTEMPTS    = 3
 RETRY_DELAY_SEC   = 2.0
